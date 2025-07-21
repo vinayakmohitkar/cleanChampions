@@ -76,7 +76,7 @@ export default function LoginModal({ isOpen, userType, onClose }: LoginModalProp
           name: formData.name,
           phone: formData.phone,
           area: formData.area,
-          userType: userType,
+          userType: userType, // Make sure this matches the button clicked
         })
         if (error) throw error
       }

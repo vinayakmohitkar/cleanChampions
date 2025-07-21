@@ -80,10 +80,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
+      options: {
+        data: {
+          full_name: userData.name,
+          user_type: userData.userType,
+          phone: userData.phone || null,
+          preferred_area: userData.area || null,
+        },
+      },
     })
 
     if (!error && data.user) {
-      // Create profile
+      // Create profile manually as backup
       const { error: profileError } = await supabase.from("profiles").insert({
         id: data.user.id,
         email,
@@ -95,6 +103,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       if (profileError) {
         console.error("Error creating profile:", profileError)
+      } else {
+        // Fetch the profile immediately after creation
+        await fetchProfile(data.user.id)
       }
     }
 
