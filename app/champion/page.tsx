@@ -4,6 +4,7 @@ import type React from "react"
 import { useEffect, useState } from "react"
 import { useAuth } from "@/contexts/auth-context"
 import { supabase } from "@/lib/supabase"
+import { PostcodeService } from "@/lib/postcode-service"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -11,10 +12,9 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { MapPin, Trash2, Package, Plus, LogOut } from "lucide-react"
+import { MapPin, Trash2, Package, Plus, LogOut, Clock, Award } from "lucide-react"
 import dynamic from "next/dynamic"
 
-// Dynamically import map to avoid SSR issues
 const MapComponent = dynamic(() => import("@/components/map-component"), {
   ssr: false,
   loading: () => (
@@ -27,6 +27,7 @@ type BagCollection = {
   location_lat: number
   location_lng: number
   location_name: string
+  postcode?: string
   bag_count: number
   area_cleaned: string
   notes: string | null
@@ -53,6 +54,7 @@ export default function ChampionDashboard() {
   const [currentLocation, setCurrentLocation] = useState<{ lat: number; lng: number } | null>(null)
 
   const [newCollection, setNewCollection] = useState({
+    postcode: "",
     location_name: "",
     bag_count: 1,
     area_cleaned: "",
@@ -73,7 +75,6 @@ export default function ChampionDashboard() {
     }
   }, [user, profile])
 
-  // Redirect if not authenticated or not a champion
   useEffect(() => {
     if (!authLoading && (!user || !profile)) {
       window.location.href = "/"
@@ -96,12 +97,10 @@ export default function ChampionDashboard() {
         },
         (error) => {
           console.error("Error getting location:", error)
-          // Default to London coordinates
           setCurrentLocation({ lat: 51.5074, lng: -0.1278 })
         },
       )
     } else {
-      // Default to London coordinates
       setCurrentLocation({ lat: 51.5074, lng: -0.1278 })
     }
   }
@@ -140,17 +139,27 @@ export default function ChampionDashboard() {
 
   const handleAddCollection = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!currentLocation) {
-      alert("Unable to get your location. Please enable location services.")
+
+    if (!PostcodeService.validatePostcode(newCollection.postcode)) {
+      alert("Please enter a valid UK postcode (e.g., SW1A 1AA)")
       return
     }
 
     try {
+      // Geocode the postcode
+      const postcodeResult = await PostcodeService.geocodePostcode(newCollection.postcode)
+
+      if (!postcodeResult) {
+        alert("Could not find location for this postcode. Please check and try again.")
+        return
+      }
+
       const { error } = await supabase.from("bag_collections").insert({
         champion_id: user!.id,
-        location_lat: currentLocation.lat,
-        location_lng: currentLocation.lng,
+        location_lat: postcodeResult.latitude,
+        location_lng: postcodeResult.longitude,
         location_name: newCollection.location_name,
+        postcode: postcodeResult.postcode,
         bag_count: newCollection.bag_count,
         area_cleaned: newCollection.area_cleaned,
         notes: newCollection.notes || null,
@@ -159,6 +168,7 @@ export default function ChampionDashboard() {
       if (error) throw error
 
       setNewCollection({
+        postcode: "",
         location_name: "",
         bag_count: 1,
         area_cleaned: "",
@@ -201,10 +211,10 @@ export default function ChampionDashboard() {
 
   if (authLoading || loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
+      <div className="min-h-screen flex items-center justify-center bg-green-50">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-green-600 mx-auto mb-4"></div>
-          <p>Loading your dashboard...</p>
+          <p className="text-green-800">Loading your Champion dashboard...</p>
         </div>
       </div>
     )
@@ -230,19 +240,34 @@ export default function ChampionDashboard() {
     .reduce((sum, collection) => sum + collection.bag_count, 0)
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-green-50">
       {/* Header */}
-      <header className="bg-white shadow-sm border-b">
+      <header className="bg-white shadow-sm border-b border-green-200">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center py-4">
-            <div>
-              <h1 className="text-2xl font-bold text-gray-900">Clean Champion Dashboard</h1>
-              <p className="text-gray-600">Welcome back, {profile?.full_name}!</p>
+            <div className="flex items-center space-x-3">
+              <div className="bg-green-600 p-2 rounded-lg">
+                <Award className="h-6 w-6 text-white" />
+              </div>
+              <div>
+                <h1 className="text-2xl font-bold text-green-900">Clean Champion Dashboard</h1>
+                <p className="text-green-700">Welcome back, {profile?.full_name}! 🌟</p>
+              </div>
             </div>
-            <Button variant="outline" onClick={signOut}>
-              <LogOut className="h-4 w-4 mr-2" />
-              Sign Out
-            </Button>
+            <div className="flex items-center space-x-4">
+              <div className="text-sm text-green-600">
+                <Clock className="h-4 w-4 inline mr-1" />
+                Session expires in 15 min
+              </div>
+              <Button
+                variant="outline"
+                onClick={signOut}
+                className="border-green-300 text-green-700 hover:bg-green-100 bg-transparent"
+              >
+                <LogOut className="h-4 w-4 mr-2" />
+                Sign Out
+              </Button>
+            </div>
           </div>
         </div>
       </header>
@@ -250,54 +275,67 @@ export default function ChampionDashboard() {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Stats Cards */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-          <Card>
+          <Card className="border-green-200 bg-gradient-to-br from-green-50 to-green-100">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Total Bags Logged</CardTitle>
-              <Trash2 className="h-4 w-4 text-muted-foreground" />
+              <CardTitle className="text-sm font-medium text-green-800">Total Bags Logged</CardTitle>
+              <Trash2 className="h-4 w-4 text-green-600" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold text-green-600">{totalBags}</div>
+              <div className="text-2xl font-bold text-green-700">{totalBags}</div>
+              <p className="text-xs text-green-600 mt-1">Keep up the great work! 🎯</p>
             </CardContent>
           </Card>
 
-          <Card>
+          <Card className="border-blue-200 bg-gradient-to-br from-blue-50 to-blue-100">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Bags Collected</CardTitle>
-              <Package className="h-4 w-4 text-muted-foreground" />
+              <CardTitle className="text-sm font-medium text-blue-800">Bags Collected</CardTitle>
+              <Package className="h-4 w-4 text-blue-600" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold text-blue-600">{collectedBags}</div>
+              <div className="text-2xl font-bold text-blue-700">{collectedBags}</div>
+              <p className="text-xs text-blue-600 mt-1">Council collected ✅</p>
             </CardContent>
           </Card>
 
-          <Card>
+          <Card className="border-purple-200 bg-gradient-to-br from-purple-50 to-purple-100">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Areas Cleaned</CardTitle>
-              <MapPin className="h-4 w-4 text-muted-foreground" />
+              <CardTitle className="text-sm font-medium text-purple-800">Areas Cleaned</CardTitle>
+              <MapPin className="h-4 w-4 text-purple-600" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold text-purple-600">{collections.length}</div>
+              <div className="text-2xl font-bold text-purple-700">{collections.length}</div>
+              <p className="text-xs text-purple-600 mt-1">Making a difference! 🌍</p>
             </CardContent>
           </Card>
         </div>
 
         <Tabs defaultValue="log" className="space-y-6">
-          <TabsList>
-            <TabsTrigger value="log">Log Collection</TabsTrigger>
-            <TabsTrigger value="history">History</TabsTrigger>
-            <TabsTrigger value="supplies">Request Supplies</TabsTrigger>
-            <TabsTrigger value="map">Community Map</TabsTrigger>
+          <TabsList className="bg-green-100 border-green-200">
+            <TabsTrigger value="log" className="data-[state=active]:bg-green-600 data-[state=active]:text-white">
+              Log Collection
+            </TabsTrigger>
+            <TabsTrigger value="history" className="data-[state=active]:bg-green-600 data-[state=active]:text-white">
+              History
+            </TabsTrigger>
+            <TabsTrigger value="supplies" className="data-[state=active]:bg-green-600 data-[state=active]:text-white">
+              Request Supplies
+            </TabsTrigger>
+            <TabsTrigger value="map" className="data-[state=active]:bg-green-600 data-[state=active]:text-white">
+              Community Map
+            </TabsTrigger>
           </TabsList>
 
           <TabsContent value="log" className="space-y-6">
-            <Card>
-              <CardHeader>
-                <CardTitle>Log New Collection</CardTitle>
-                <CardDescription>Record the bags you've collected and their location</CardDescription>
+            <Card className="border-green-200">
+              <CardHeader className="bg-green-50">
+                <CardTitle className="text-green-900">Log New Collection</CardTitle>
+                <CardDescription className="text-green-700">
+                  Record the bags you've collected with postcode location
+                </CardDescription>
               </CardHeader>
-              <CardContent>
+              <CardContent className="pt-6">
                 {!showAddForm ? (
-                  <Button onClick={() => setShowAddForm(true)}>
+                  <Button onClick={() => setShowAddForm(true)} className="bg-green-600 hover:bg-green-700">
                     <Plus className="h-4 w-4 mr-2" />
                     Add New Collection
                   </Button>
@@ -305,17 +343,40 @@ export default function ChampionDashboard() {
                   <form onSubmit={handleAddCollection} className="space-y-4">
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div>
-                        <Label htmlFor="location_name">Location Name</Label>
+                        <Label htmlFor="postcode" className="text-green-800">
+                          Postcode *
+                        </Label>
+                        <Input
+                          id="postcode"
+                          placeholder="e.g., SW1A 1AA"
+                          value={newCollection.postcode}
+                          onChange={(e) =>
+                            setNewCollection({ ...newCollection, postcode: e.target.value.toUpperCase() })
+                          }
+                          className="border-green-300 focus:border-green-500"
+                          required
+                        />
+                        <p className="text-xs text-green-600 mt-1">UK postcode for precise location</p>
+                      </div>
+                      <div>
+                        <Label htmlFor="location_name" className="text-green-800">
+                          Location Name *
+                        </Label>
                         <Input
                           id="location_name"
                           placeholder="e.g., High Street, Park entrance"
                           value={newCollection.location_name}
                           onChange={(e) => setNewCollection({ ...newCollection, location_name: e.target.value })}
+                          className="border-green-300 focus:border-green-500"
                           required
                         />
                       </div>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div>
-                        <Label htmlFor="bag_count">Number of Bags</Label>
+                        <Label htmlFor="bag_count" className="text-green-800">
+                          Number of Bags *
+                        </Label>
                         <Input
                           id="bag_count"
                           type="number"
@@ -324,32 +385,46 @@ export default function ChampionDashboard() {
                           onChange={(e) =>
                             setNewCollection({ ...newCollection, bag_count: Number.parseInt(e.target.value) })
                           }
+                          className="border-green-300 focus:border-green-500"
+                          required
+                        />
+                      </div>
+                      <div>
+                        <Label htmlFor="area_cleaned" className="text-green-800">
+                          Area Cleaned *
+                        </Label>
+                        <Input
+                          id="area_cleaned"
+                          placeholder="Describe the area you cleaned"
+                          value={newCollection.area_cleaned}
+                          onChange={(e) => setNewCollection({ ...newCollection, area_cleaned: e.target.value })}
+                          className="border-green-300 focus:border-green-500"
                           required
                         />
                       </div>
                     </div>
                     <div>
-                      <Label htmlFor="area_cleaned">Area Cleaned</Label>
-                      <Input
-                        id="area_cleaned"
-                        placeholder="Describe the area you cleaned"
-                        value={newCollection.area_cleaned}
-                        onChange={(e) => setNewCollection({ ...newCollection, area_cleaned: e.target.value })}
-                        required
-                      />
-                    </div>
-                    <div>
-                      <Label htmlFor="notes">Notes (Optional)</Label>
+                      <Label htmlFor="notes" className="text-green-800">
+                        Notes (Optional)
+                      </Label>
                       <Textarea
                         id="notes"
                         placeholder="Any additional notes about the collection"
                         value={newCollection.notes}
                         onChange={(e) => setNewCollection({ ...newCollection, notes: e.target.value })}
+                        className="border-green-300 focus:border-green-500"
                       />
                     </div>
                     <div className="flex space-x-2">
-                      <Button type="submit">Save Collection</Button>
-                      <Button type="button" variant="outline" onClick={() => setShowAddForm(false)}>
+                      <Button type="submit" className="bg-green-600 hover:bg-green-700">
+                        Save Collection
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => setShowAddForm(false)}
+                        className="border-green-300 text-green-700 hover:bg-green-100"
+                      >
                         Cancel
                       </Button>
                     </div>
@@ -360,36 +435,48 @@ export default function ChampionDashboard() {
           </TabsContent>
 
           <TabsContent value="history" className="space-y-6">
-            <Card>
-              <CardHeader>
-                <CardTitle>Collection History</CardTitle>
-                <CardDescription>Your past bag collections and their status</CardDescription>
+            <Card className="border-green-200">
+              <CardHeader className="bg-green-50">
+                <CardTitle className="text-green-900">Collection History</CardTitle>
+                <CardDescription className="text-green-700">Your past bag collections and their status</CardDescription>
               </CardHeader>
-              <CardContent>
+              <CardContent className="pt-6">
                 <div className="space-y-4">
                   {collections.map((collection) => (
-                    <div key={collection.id} className="flex items-center justify-between p-4 border rounded-lg">
+                    <div
+                      key={collection.id}
+                      className="flex items-center justify-between p-4 border border-green-200 rounded-lg bg-green-50"
+                    >
                       <div className="flex-1">
                         <div className="flex items-center space-x-2 mb-1">
-                          <MapPin className="h-4 w-4 text-gray-500" />
-                          <span className="font-medium">{collection.location_name}</span>
-                          <Badge variant={collection.collected ? "default" : "secondary"}>
+                          <MapPin className="h-4 w-4 text-green-600" />
+                          <span className="font-medium text-green-900">{collection.location_name}</span>
+                          {collection.postcode && (
+                            <Badge variant="outline" className="border-green-300 text-green-700">
+                              {collection.postcode}
+                            </Badge>
+                          )}
+                          <Badge
+                            variant={collection.collected ? "default" : "secondary"}
+                            className={collection.collected ? "bg-green-600" : "bg-yellow-500"}
+                          >
                             {collection.collected ? "Collected" : "Pending"}
                           </Badge>
                         </div>
-                        <p className="text-sm text-gray-600">{collection.area_cleaned}</p>
-                        <p className="text-sm text-gray-500">
+                        <p className="text-sm text-green-700">{collection.area_cleaned}</p>
+                        <p className="text-sm text-green-600">
                           {collection.bag_count} bag{collection.bag_count > 1 ? "s" : ""} •{" "}
                           {new Date(collection.created_at).toLocaleDateString()}
                         </p>
-                        {collection.notes && <p className="text-sm text-gray-600 mt-1">Note: {collection.notes}</p>}
+                        {collection.notes && <p className="text-sm text-green-600 mt-1">Note: {collection.notes}</p>}
                       </div>
                     </div>
                   ))}
                   {collections.length === 0 && (
-                    <p className="text-center text-gray-500 py-8">
-                      No collections logged yet. Start by adding your first collection!
-                    </p>
+                    <div className="text-center py-8 text-green-600">
+                      <Award className="h-12 w-12 mx-auto mb-4 text-green-400" />
+                      <p>No collections logged yet. Start by adding your first collection!</p>
+                    </div>
                   )}
                 </div>
               </CardContent>
@@ -398,18 +485,22 @@ export default function ChampionDashboard() {
 
           <TabsContent value="supplies" className="space-y-6">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <Card>
-                <CardHeader>
-                  <CardTitle>Request Supplies</CardTitle>
-                  <CardDescription>Request more bags or gloves for your cleaning efforts</CardDescription>
+              <Card className="border-green-200">
+                <CardHeader className="bg-green-50">
+                  <CardTitle className="text-green-900">Request Supplies</CardTitle>
+                  <CardDescription className="text-green-700">
+                    Request more bags or gloves for your cleaning efforts
+                  </CardDescription>
                 </CardHeader>
-                <CardContent>
+                <CardContent className="pt-6">
                   <form onSubmit={handleSupplyRequest} className="space-y-4">
                     <div>
-                      <Label htmlFor="request_type">Supply Type</Label>
+                      <Label htmlFor="request_type" className="text-green-800">
+                        Supply Type
+                      </Label>
                       <select
                         id="request_type"
-                        className="w-full p-2 border rounded-md"
+                        className="w-full p-2 border border-green-300 rounded-md focus:border-green-500"
                         value={newSupplyRequest.request_type}
                         onChange={(e) =>
                           setNewSupplyRequest({ ...newSupplyRequest, request_type: e.target.value as any })
@@ -421,7 +512,9 @@ export default function ChampionDashboard() {
                       </select>
                     </div>
                     <div>
-                      <Label htmlFor="quantity">Quantity</Label>
+                      <Label htmlFor="quantity" className="text-green-800">
+                        Quantity
+                      </Label>
                       <Input
                         id="quantity"
                         type="number"
@@ -430,36 +523,40 @@ export default function ChampionDashboard() {
                         onChange={(e) =>
                           setNewSupplyRequest({ ...newSupplyRequest, quantity: Number.parseInt(e.target.value) })
                         }
+                        className="border-green-300 focus:border-green-500"
                         required
                       />
                     </div>
                     <div>
-                      <Label htmlFor="supply_notes">Notes (Optional)</Label>
+                      <Label htmlFor="supply_notes" className="text-green-800">
+                        Notes (Optional)
+                      </Label>
                       <Textarea
                         id="supply_notes"
                         placeholder="Any specific requirements or delivery instructions"
                         value={newSupplyRequest.notes}
                         onChange={(e) => setNewSupplyRequest({ ...newSupplyRequest, notes: e.target.value })}
+                        className="border-green-300 focus:border-green-500"
                       />
                     </div>
-                    <Button type="submit" className="w-full">
+                    <Button type="submit" className="w-full bg-green-600 hover:bg-green-700">
                       Request Supplies
                     </Button>
                   </form>
                 </CardContent>
               </Card>
 
-              <Card>
-                <CardHeader>
-                  <CardTitle>Supply Requests</CardTitle>
-                  <CardDescription>Track your supply request status</CardDescription>
+              <Card className="border-green-200">
+                <CardHeader className="bg-green-50">
+                  <CardTitle className="text-green-900">Supply Requests</CardTitle>
+                  <CardDescription className="text-green-700">Track your supply request status</CardDescription>
                 </CardHeader>
-                <CardContent>
+                <CardContent className="pt-6">
                   <div className="space-y-3">
                     {supplyRequests.map((request) => (
-                      <div key={request.id} className="p-3 border rounded-lg">
+                      <div key={request.id} className="p-3 border border-green-200 rounded-lg bg-green-50">
                         <div className="flex items-center justify-between mb-1">
-                          <span className="font-medium capitalize">{request.request_type}</span>
+                          <span className="font-medium capitalize text-green-900">{request.request_type}</span>
                           <Badge
                             variant={
                               request.status === "delivered"
@@ -468,17 +565,24 @@ export default function ChampionDashboard() {
                                   ? "secondary"
                                   : "outline"
                             }
+                            className={
+                              request.status === "delivered"
+                                ? "bg-green-600"
+                                : request.status === "approved"
+                                  ? "bg-blue-500"
+                                  : "border-yellow-400 text-yellow-700"
+                            }
                           >
                             {request.status}
                           </Badge>
                         </div>
-                        <p className="text-sm text-gray-600">Quantity: {request.quantity}</p>
-                        <p className="text-sm text-gray-500">{new Date(request.created_at).toLocaleDateString()}</p>
-                        {request.notes && <p className="text-sm text-gray-600 mt-1">Note: {request.notes}</p>}
+                        <p className="text-sm text-green-700">Quantity: {request.quantity}</p>
+                        <p className="text-sm text-green-600">{new Date(request.created_at).toLocaleDateString()}</p>
+                        {request.notes && <p className="text-sm text-green-600 mt-1">Note: {request.notes}</p>}
                       </div>
                     ))}
                     {supplyRequests.length === 0 && (
-                      <p className="text-center text-gray-500 py-4">No supply requests yet</p>
+                      <p className="text-center text-green-600 py-4">No supply requests yet</p>
                     )}
                   </div>
                 </CardContent>
@@ -487,15 +591,22 @@ export default function ChampionDashboard() {
           </TabsContent>
 
           <TabsContent value="map" className="space-y-6">
-            <Card>
-              <CardHeader>
-                <CardTitle>Community Activity Map</CardTitle>
-                <CardDescription>See where you and other Clean Champions have been active</CardDescription>
+            <Card className="border-green-200">
+              <CardHeader className="bg-green-50">
+                <CardTitle className="text-green-900">Community Activity Map</CardTitle>
+                <CardDescription className="text-green-700">
+                  See where you and other Clean Champions have been active
+                </CardDescription>
               </CardHeader>
-              <CardContent>
-                <div className="h-96 rounded-lg overflow-hidden">
+              <CardContent className="pt-6">
+                <div className="h-96 rounded-lg overflow-hidden border border-green-200">
                   {currentLocation && (
-                    <MapComponent center={currentLocation} collections={collections} showAllCollections={true} />
+                    <MapComponent
+                      center={currentLocation}
+                      collections={collections}
+                      showAllCollections={true}
+                      highlightPostcode={collections.length > 0 ? collections[0].postcode : undefined}
+                    />
                   )}
                 </div>
               </CardContent>

@@ -4,6 +4,7 @@ import type React from "react"
 import { createContext, useContext, useEffect, useState } from "react"
 import type { User } from "@supabase/supabase-js"
 import { supabase } from "@/lib/supabase"
+import { SessionManager } from "@/lib/session-manager"
 
 type Profile = {
   id: string
@@ -29,6 +30,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
   const [profile, setProfile] = useState<Profile | null>(null)
   const [loading, setLoading] = useState(true)
+  const sessionManager = SessionManager.getInstance()
 
   useEffect(() => {
     // Get initial session
@@ -43,12 +45,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           console.error("Error getting session:", error)
         }
 
-        // Accept user even if email is not confirmed
         const currentUser = session?.user ?? null
         setUser(currentUser)
 
         if (currentUser) {
           await fetchProfile(currentUser.id)
+          // Start session management
+          sessionManager.startSession(() => signOut())
         }
       } catch (error) {
         console.error("Error in getInitialSession:", error)
@@ -65,30 +68,32 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     } = supabase.auth.onAuthStateChange(async (event, session) => {
       console.log("Auth state changed:", event, session?.user?.email)
 
-      // Accept user even if email is not confirmed
       const currentUser = session?.user ?? null
       setUser(currentUser)
 
       if (currentUser) {
         await fetchProfile(currentUser.id)
+        sessionManager.startSession(() => signOut())
       } else {
         setProfile(null)
+        sessionManager.clearSession()
       }
       setLoading(false)
     })
 
-    return () => subscription.unsubscribe()
+    return () => {
+      subscription.unsubscribe()
+      sessionManager.clearSession()
+    }
   }, [])
 
   const fetchProfile = async (userId: string) => {
     try {
       console.log("Fetching profile for user:", userId)
 
-      // Try to get existing profile
       const { data, error } = await supabase.from("profiles").select("*").eq("id", userId).single()
 
       if (error && error.code === "PGRST116") {
-        // Profile doesn't exist, this is normal for new users
         console.log("Profile not found, will be created on signup")
         return
       }
@@ -129,12 +134,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       console.log("Attempting to sign up:", email, userData)
 
-      // Sign up user (this will work even without email confirmation)
       const { data, error } = await supabase.auth.signUp({
         email,
         password,
         options: {
-          emailRedirectTo: undefined, // Disable email confirmation redirect
+          emailRedirectTo: undefined,
         },
       })
 
@@ -146,7 +150,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (data.user) {
         console.log("User created:", data.user.id)
 
-        // Create profile immediately
         const { error: profileError } = await supabase.from("profiles").upsert(
           {
             id: data.user.id,
@@ -168,7 +171,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
         console.log("Profile created successfully")
 
-        // Set the profile immediately
         setProfile({
           id: data.user.id,
           email: email,
@@ -187,8 +189,30 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }
 
   const signOut = async () => {
-    await supabase.auth.signOut()
-    setProfile(null)
+    try {
+      sessionManager.clearSession()
+      await supabase.auth.signOut()
+      setProfile(null)
+      setUser(null)
+
+      // Clear all storage and cookies
+      localStorage.clear()
+      sessionStorage.clear()
+
+      // Clear cookies
+      document.cookie.split(";").forEach((c) => {
+        const eqPos = c.indexOf("=")
+        const name = eqPos > -1 ? c.substr(0, eqPos) : c
+        document.cookie = name + "=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/"
+      })
+
+      // Redirect to home
+      window.location.href = "/"
+    } catch (error) {
+      console.error("Error signing out:", error)
+      // Force redirect even if there's an error
+      window.location.href = "/"
+    }
   }
 
   return (

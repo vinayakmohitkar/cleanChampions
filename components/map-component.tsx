@@ -7,6 +7,7 @@ type Collection = {
   location_lat: number
   location_lng: number
   location_name: string
+  postcode?: string
   bag_count: number
   area_cleaned: string
   collected: boolean
@@ -18,6 +19,7 @@ interface MapComponentProps {
   collections: Collection[]
   showAllCollections?: boolean
   onLocationSelect?: (lat: number, lng: number) => void
+  highlightPostcode?: string
 }
 
 export default function MapComponent({
@@ -25,6 +27,7 @@ export default function MapComponent({
   collections,
   showAllCollections = false,
   onLocationSelect,
+  highlightPostcode,
 }: MapComponentProps) {
   const mapRef = useRef<HTMLDivElement>(null)
   const mapInstanceRef = useRef<any>(null)
@@ -32,7 +35,6 @@ export default function MapComponent({
   useEffect(() => {
     if (!mapRef.current) return
 
-    // Dynamically import Leaflet to avoid SSR issues
     const initMap = async () => {
       try {
         const L = (await import("leaflet")).default
@@ -55,6 +57,22 @@ export default function MapComponent({
 
         mapInstanceRef.current = map
 
+        // Add postcode highlight if provided
+        if (highlightPostcode) {
+          // Create a circle to highlight the postcode area
+          const circle = L.circle([center.lat, center.lng], {
+            color: "#3b82f6",
+            fillColor: "#3b82f6",
+            fillOpacity: 0.1,
+            radius: 1000, // 1km radius
+          }).addTo(map)
+
+          circle.bindPopup(`<div style="text-align: center; padding: 4px;">
+            <strong>${highlightPostcode}</strong><br>
+            <span style="font-size: 12px; color: #6b7280;">Highlighted Area</span>
+          </div>`)
+        }
+
         // Add click handler if onLocationSelect is provided
         if (onLocationSelect) {
           map.on("click", (e: any) => {
@@ -64,40 +82,60 @@ export default function MapComponent({
 
         // Add collection markers
         collections.forEach((collection) => {
+          const isHighlighted = highlightPostcode && collection.postcode === highlightPostcode
+
           const icon = L.divIcon({
-            html: `<div style="width: 24px; height: 24px; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: white; font-size: 12px; font-weight: bold; ${
-              collection.collected ? "background-color: #10b981;" : "background-color: #ef4444;"
-            }">${collection.bag_count}</div>`,
+            html: `<div style="
+              width: 28px; 
+              height: 28px; 
+              border-radius: 50%; 
+              display: flex; 
+              align-items: center; 
+              justify-content: center; 
+              color: white; 
+              font-size: 12px; 
+              font-weight: bold; 
+              border: ${isHighlighted ? "3px solid #fbbf24" : "2px solid white"};
+              box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+              ${collection.collected ? "background-color: #10b981;" : "background-color: #ef4444;"}
+            ">${collection.bag_count}</div>`,
             className: "custom-div-icon",
-            iconSize: [24, 24],
-            iconAnchor: [12, 12],
+            iconSize: [28, 28],
+            iconAnchor: [14, 14],
           })
 
           const marker = L.marker([collection.location_lat, collection.location_lng], { icon }).addTo(map)
 
           marker.bindPopup(`
-            <div style="padding: 8px;">
-              <h3 style="font-weight: 600; margin-bottom: 4px;">${collection.location_name}</h3>
+            <div style="padding: 8px; min-width: 200px;">
+              <h3 style="font-weight: 600; margin-bottom: 4px; color: #1f2937;">${collection.location_name}</h3>
+              ${collection.postcode ? `<p style="font-size: 12px; color: #6b7280; margin-bottom: 4px;"><strong>Postcode:</strong> ${collection.postcode}</p>` : ""}
               <p style="font-size: 14px; color: #6b7280; margin-bottom: 4px;">${collection.area_cleaned}</p>
               <p style="font-size: 14px; margin-bottom: 4px;">
                 <strong>${collection.bag_count}</strong> bag${collection.bag_count > 1 ? "s" : ""}
               </p>
-              <p style="font-size: 12px; color: #9ca3af; margin-bottom: 4px;">
+              <p style="font-size: 12px; color: #9ca3af; margin-bottom: 8px;">
                 ${new Date(collection.created_at).toLocaleDateString()}
               </p>
-              <span style="display: inline-block; padding: 2px 8px; font-size: 12px; border-radius: 4px; ${
-                collection.collected
-                  ? "background-color: #d1fae5; color: #065f46;"
-                  : "background-color: #fee2e2; color: #991b1b;"
-              }">
-                ${collection.collected ? "Collected" : "Pending Collection"}
+              <span style="
+                display: inline-block; 
+                padding: 4px 8px; 
+                font-size: 12px; 
+                border-radius: 4px; 
+                font-weight: 500;
+                ${
+                  collection.collected
+                    ? "background-color: #d1fae5; color: #065f46;"
+                    : "background-color: #fee2e2; color: #991b1b;"
+                }
+              ">
+                ${collection.collected ? "✅ Collected" : "⏳ Pending Collection"}
               </span>
             </div>
           `)
         })
       } catch (error) {
         console.error("Error loading map:", error)
-        // Show fallback message
         if (mapRef.current) {
           mapRef.current.innerHTML = `
             <div style="display: flex; align-items: center; justify-content: center; height: 100%; background-color: #f3f4f6; border-radius: 8px;">
@@ -118,7 +156,7 @@ export default function MapComponent({
         mapInstanceRef.current.remove()
       }
     }
-  }, [center.lat, center.lng, collections, onLocationSelect])
+  }, [center.lat, center.lng, collections, onLocationSelect, highlightPostcode])
 
   return <div ref={mapRef} className="w-full h-full" style={{ minHeight: "300px" }} />
 }
