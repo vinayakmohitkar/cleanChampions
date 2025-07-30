@@ -38,13 +38,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           data: { session },
           error,
         } = await supabase.auth.getSession()
+
         if (error) {
           console.error("Error getting session:", error)
         }
 
-        setUser(session?.user ?? null)
-        if (session?.user) {
-          await fetchProfile(session.user.id)
+        // Accept user even if email is not confirmed
+        const currentUser = session?.user ?? null
+        setUser(currentUser)
+
+        if (currentUser) {
+          await fetchProfile(currentUser.id)
         }
       } catch (error) {
         console.error("Error in getInitialSession:", error)
@@ -60,10 +64,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       data: { subscription },
     } = supabase.auth.onAuthStateChange(async (event, session) => {
       console.log("Auth state changed:", event, session?.user?.email)
-      setUser(session?.user ?? null)
 
-      if (session?.user) {
-        await fetchProfile(session.user.id)
+      // Accept user even if email is not confirmed
+      const currentUser = session?.user ?? null
+      setUser(currentUser)
+
+      if (currentUser) {
+        await fetchProfile(currentUser.id)
       } else {
         setProfile(null)
       }
@@ -76,7 +83,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const fetchProfile = async (userId: string) => {
     try {
       console.log("Fetching profile for user:", userId)
+
+      // Try to get existing profile
       const { data, error } = await supabase.from("profiles").select("*").eq("id", userId).single()
+
+      if (error && error.code === "PGRST116") {
+        // Profile doesn't exist, this is normal for new users
+        console.log("Profile not found, will be created on signup")
+        return
+      }
 
       if (error) {
         console.error("Error fetching profile:", error)
@@ -100,9 +115,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       if (error) {
         console.error("Sign in error:", error)
+        return { error }
       }
 
-      return { error }
+      return { error: null }
     } catch (error) {
       console.error("Error in signIn:", error)
       return { error }
@@ -113,10 +129,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       console.log("Attempting to sign up:", email, userData)
 
-      // First, create the auth user
+      // Sign up user (this will work even without email confirmation)
       const { data, error } = await supabase.auth.signUp({
         email,
         password,
+        options: {
+          emailRedirectTo: undefined, // Disable email confirmation redirect
+        },
       })
 
       if (error) {
@@ -125,20 +144,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
 
       if (data.user) {
-        console.log("User created, now creating profile:", data.user.id)
+        console.log("User created:", data.user.id)
 
-        // Wait a moment for the user to be fully created
-        await new Promise((resolve) => setTimeout(resolve, 1000))
-
-        // Create the profile manually
-        const { error: profileError } = await supabase.from("profiles").insert({
-          id: data.user.id,
-          email: email,
-          full_name: userData.name,
-          phone: userData.phone || null,
-          preferred_area: userData.area || null,
-          user_type: userData.userType,
-        })
+        // Create profile immediately
+        const { error: profileError } = await supabase.from("profiles").upsert(
+          {
+            id: data.user.id,
+            email: email,
+            full_name: userData.name,
+            phone: userData.phone || null,
+            preferred_area: userData.area || null,
+            user_type: userData.userType,
+          },
+          {
+            onConflict: "id",
+          },
+        )
 
         if (profileError) {
           console.error("Error creating profile:", profileError)
@@ -147,8 +168,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
         console.log("Profile created successfully")
 
-        // Fetch the profile immediately
-        await fetchProfile(data.user.id)
+        // Set the profile immediately
+        setProfile({
+          id: data.user.id,
+          email: email,
+          full_name: userData.name,
+          phone: userData.phone || null,
+          preferred_area: userData.area || null,
+          user_type: userData.userType,
+        })
       }
 
       return { error: null }

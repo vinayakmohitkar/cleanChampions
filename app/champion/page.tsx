@@ -1,7 +1,6 @@
 "use client"
 
 import type React from "react"
-
 import { useEffect, useState } from "react"
 import { useAuth } from "@/contexts/auth-context"
 import { supabase } from "@/lib/supabase"
@@ -16,7 +15,12 @@ import { MapPin, Trash2, Package, Plus, LogOut } from "lucide-react"
 import dynamic from "next/dynamic"
 
 // Dynamically import map to avoid SSR issues
-const MapComponent = dynamic(() => import("@/components/map-component"), { ssr: false })
+const MapComponent = dynamic(() => import("@/components/map-component"), {
+  ssr: false,
+  loading: () => (
+    <div className="w-full h-96 bg-gray-100 rounded-lg flex items-center justify-center">Loading map...</div>
+  ),
+})
 
 type BagCollection = {
   id: string
@@ -41,7 +45,7 @@ type SupplyRequest = {
 }
 
 export default function ChampionDashboard() {
-  const { user, profile, signOut } = useAuth()
+  const { user, profile, signOut, loading: authLoading } = useAuth()
   const [collections, setCollections] = useState<BagCollection[]>([])
   const [supplyRequests, setSupplyRequests] = useState<SupplyRequest[]>([])
   const [loading, setLoading] = useState(true)
@@ -62,12 +66,24 @@ export default function ChampionDashboard() {
   })
 
   useEffect(() => {
-    if (user) {
+    if (user && profile) {
       fetchCollections()
       fetchSupplyRequests()
       getCurrentLocation()
     }
-  }, [user])
+  }, [user, profile])
+
+  // Redirect if not authenticated or not a champion
+  useEffect(() => {
+    if (!authLoading && (!user || !profile)) {
+      window.location.href = "/"
+      return
+    }
+    if (!authLoading && profile && profile.user_type !== "champion") {
+      window.location.href = "/"
+      return
+    }
+  }, [user, profile, authLoading])
 
   const getCurrentLocation = () => {
     if (navigator.geolocation) {
@@ -80,10 +96,13 @@ export default function ChampionDashboard() {
         },
         (error) => {
           console.error("Error getting location:", error)
-          // Default to a central location if geolocation fails
-          setCurrentLocation({ lat: 51.5074, lng: -0.1278 }) // London
+          // Default to London coordinates
+          setCurrentLocation({ lat: 51.5074, lng: -0.1278 })
         },
       )
+    } else {
+      // Default to London coordinates
+      setCurrentLocation({ lat: 51.5074, lng: -0.1278 })
     }
   }
 
@@ -121,7 +140,10 @@ export default function ChampionDashboard() {
 
   const handleAddCollection = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!currentLocation) return
+    if (!currentLocation) {
+      alert("Unable to get your location. Please enable location services.")
+      return
+    }
 
     try {
       const { error } = await supabase.from("bag_collections").insert({
@@ -131,7 +153,7 @@ export default function ChampionDashboard() {
         location_name: newCollection.location_name,
         bag_count: newCollection.bag_count,
         area_cleaned: newCollection.area_cleaned,
-        notes: newCollection.notes,
+        notes: newCollection.notes || null,
       })
 
       if (error) throw error
@@ -144,8 +166,10 @@ export default function ChampionDashboard() {
       })
       setShowAddForm(false)
       fetchCollections()
+      alert("Collection logged successfully!")
     } catch (error) {
       console.error("Error adding collection:", error)
+      alert("Error logging collection. Please try again.")
     }
   }
 
@@ -157,7 +181,7 @@ export default function ChampionDashboard() {
         champion_id: user!.id,
         request_type: newSupplyRequest.request_type,
         quantity: newSupplyRequest.quantity,
-        notes: newSupplyRequest.notes,
+        notes: newSupplyRequest.notes || null,
       })
 
       if (error) throw error
@@ -168,17 +192,33 @@ export default function ChampionDashboard() {
         notes: "",
       })
       fetchSupplyRequests()
+      alert("Supply request submitted successfully!")
     } catch (error) {
       console.error("Error requesting supplies:", error)
+      alert("Error submitting supply request. Please try again.")
     }
   }
 
-  if (loading) {
+  if (authLoading || loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-green-600 mx-auto mb-4"></div>
           <p>Loading your dashboard...</p>
+        </div>
+      </div>
+    )
+  }
+
+  if (!user || !profile) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <h1 className="text-2xl font-bold text-gray-900 mb-2">Access Denied</h1>
+          <p className="text-gray-600 mb-4">Please log in to access the champion dashboard.</p>
+          <a href="/" className="text-blue-600 hover:underline">
+            Go to Home
+          </a>
         </div>
       </div>
     )
@@ -342,6 +382,7 @@ export default function ChampionDashboard() {
                           {collection.bag_count} bag{collection.bag_count > 1 ? "s" : ""} •{" "}
                           {new Date(collection.created_at).toLocaleDateString()}
                         </p>
+                        {collection.notes && <p className="text-sm text-gray-600 mt-1">Note: {collection.notes}</p>}
                       </div>
                     </div>
                   ))}
@@ -433,6 +474,7 @@ export default function ChampionDashboard() {
                         </div>
                         <p className="text-sm text-gray-600">Quantity: {request.quantity}</p>
                         <p className="text-sm text-gray-500">{new Date(request.created_at).toLocaleDateString()}</p>
+                        {request.notes && <p className="text-sm text-gray-600 mt-1">Note: {request.notes}</p>}
                       </div>
                     ))}
                     {supplyRequests.length === 0 && (
@@ -448,7 +490,7 @@ export default function ChampionDashboard() {
             <Card>
               <CardHeader>
                 <CardTitle>Community Activity Map</CardTitle>
-                <CardDescription>See where other Clean Champions have been active</CardDescription>
+                <CardDescription>See where you and other Clean Champions have been active</CardDescription>
               </CardHeader>
               <CardContent>
                 <div className="h-96 rounded-lg overflow-hidden">
