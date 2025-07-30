@@ -63,13 +63,27 @@ export default function AdminDashboard() {
   }, [user, profile])
 
   useEffect(() => {
-    if (!authLoading && (!user || !profile)) {
-      window.location.href = "/"
-      return
-    }
-    if (!authLoading && profile && profile.user_type !== "admin") {
-      window.location.href = "/"
-      return
+    if (!authLoading) {
+      if (!user || !profile) {
+        console.log("No user or profile, redirecting to home")
+        window.location.href = "/"
+        return
+      }
+      if (profile.user_type !== "admin") {
+        console.log(`User type ${profile.user_type} not allowed on admin page, redirecting`)
+        // Redirect to correct dashboard
+        switch (profile.user_type) {
+          case "champion":
+            window.location.href = "/champion"
+            break
+          case "worker":
+            window.location.href = "/worker"
+            break
+          default:
+            window.location.href = "/"
+        }
+        return
+      }
     }
   }, [user, profile, authLoading])
 

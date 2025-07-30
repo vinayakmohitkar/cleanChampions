@@ -76,13 +76,27 @@ export default function ChampionDashboard() {
   }, [user, profile])
 
   useEffect(() => {
-    if (!authLoading && (!user || !profile)) {
-      window.location.href = "/"
-      return
-    }
-    if (!authLoading && profile && profile.user_type !== "champion") {
-      window.location.href = "/"
-      return
+    if (!authLoading) {
+      if (!user || !profile) {
+        console.log("No user or profile, redirecting to home")
+        window.location.href = "/"
+        return
+      }
+      if (profile.user_type !== "champion") {
+        console.log(`User type ${profile.user_type} not allowed on champion page, redirecting`)
+        // Redirect to correct dashboard
+        switch (profile.user_type) {
+          case "worker":
+            window.location.href = "/worker"
+            break
+          case "admin":
+            window.location.href = "/admin"
+            break
+          default:
+            window.location.href = "/"
+        }
+        return
+      }
     }
   }, [user, profile, authLoading])
 
@@ -97,11 +111,13 @@ export default function ChampionDashboard() {
         },
         (error) => {
           console.error("Error getting location:", error)
-          setCurrentLocation({ lat: 51.5074, lng: -0.1278 })
+          // Default to Nottingham coordinates instead of London
+          setCurrentLocation({ lat: 52.9548, lng: -1.1581 })
         },
       )
     } else {
-      setCurrentLocation({ lat: 51.5074, lng: -0.1278 })
+      // Default to Nottingham coordinates
+      setCurrentLocation({ lat: 52.9548, lng: -1.1581 })
     }
   }
 
@@ -141,7 +157,7 @@ export default function ChampionDashboard() {
     e.preventDefault()
 
     if (!PostcodeService.validatePostcode(newCollection.postcode)) {
-      alert("Please enter a valid UK postcode (e.g., SW1A 1AA)")
+      alert("Please enter a valid UK postcode (e.g., NG1 5DT)")
       return
     }
 
@@ -167,6 +183,12 @@ export default function ChampionDashboard() {
 
       if (error) throw error
 
+      // Update current location to the new postcode location
+      setCurrentLocation({
+        lat: postcodeResult.latitude,
+        lng: postcodeResult.longitude,
+      })
+
       setNewCollection({
         postcode: "",
         location_name: "",
@@ -176,7 +198,7 @@ export default function ChampionDashboard() {
       })
       setShowAddForm(false)
       fetchCollections()
-      alert("Collection logged successfully!")
+      alert(`Collection logged successfully in ${postcodeResult.district}!`)
     } catch (error) {
       console.error("Error adding collection:", error)
       alert("Error logging collection. Please try again.")

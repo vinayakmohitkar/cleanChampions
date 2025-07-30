@@ -49,13 +49,27 @@ export default function WorkerDashboard() {
   }, [user, profile])
 
   useEffect(() => {
-    if (!authLoading && (!user || !profile)) {
-      window.location.href = "/"
-      return
-    }
-    if (!authLoading && profile && profile.user_type !== "worker") {
-      window.location.href = "/"
-      return
+    if (!authLoading) {
+      if (!user || !profile) {
+        console.log("No user or profile, redirecting to home")
+        window.location.href = "/"
+        return
+      }
+      if (profile.user_type !== "worker") {
+        console.log(`User type ${profile.user_type} not allowed on worker page, redirecting`)
+        // Redirect to correct dashboard
+        switch (profile.user_type) {
+          case "champion":
+            window.location.href = "/champion"
+            break
+          case "admin":
+            window.location.href = "/admin"
+            break
+          default:
+            window.location.href = "/"
+        }
+        return
+      }
     }
   }, [user, profile, authLoading])
 
@@ -246,7 +260,7 @@ export default function WorkerDashboard() {
               <CardContent className="pt-6">
                 <div className="h-96 rounded-lg overflow-hidden border border-blue-200">
                   <MapComponent
-                    center={{ lat: 51.5074, lng: -0.1278 }}
+                    center={{ lat: 52.9548, lng: -1.1581 }} // Nottingham coordinates
                     collections={collections}
                     showAllCollections={true}
                   />

@@ -190,8 +190,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const signOut = async () => {
     try {
+      console.log("Signing out user...")
       sessionManager.clearSession()
+
+      // Sign out from Supabase
       await supabase.auth.signOut()
+
+      // Clear state
       setProfile(null)
       setUser(null)
 
@@ -199,14 +204,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       localStorage.clear()
       sessionStorage.clear()
 
-      // Clear cookies
-      document.cookie.split(";").forEach((c) => {
-        const eqPos = c.indexOf("=")
-        const name = eqPos > -1 ? c.substr(0, eqPos) : c
-        document.cookie = name + "=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/"
-      })
+      // Clear cookies more thoroughly
+      const cookies = document.cookie.split(";")
+      for (const cookie of cookies) {
+        const eqPos = cookie.indexOf("=")
+        const name = eqPos > -1 ? cookie.substr(0, eqPos).trim() : cookie.trim()
+        // Clear for current domain and all subdomains
+        document.cookie = `${name}=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/`
+        document.cookie = `${name}=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/;domain=${window.location.hostname}`
+        document.cookie = `${name}=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/;domain=.${window.location.hostname}`
+      }
 
-      // Redirect to home
+      // Force redirect to home
       window.location.href = "/"
     } catch (error) {
       console.error("Error signing out:", error)

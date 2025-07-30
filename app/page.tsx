@@ -1,13 +1,12 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { MapPin, Users, Shield, Trash2, Award, Bell } from "lucide-react"
 import LoginModal from "./components/login-modal"
 import { useAuth } from "@/contexts/auth-context"
-import RedirectHandler from "@/components/redirect-handler"
 
 export default function HomePage() {
   const { user, profile, loading } = useAuth()
@@ -24,6 +23,26 @@ export default function HomePage() {
     setLoginModal({ isOpen: false, userType: "" })
   }
 
+  useEffect(() => {
+    if (!loading && user && profile) {
+      // Redirect based on user type
+      switch (profile.user_type) {
+        case "champion":
+          window.location.href = "/champion"
+          break
+        case "worker":
+          window.location.href = "/worker"
+          break
+        case "admin":
+          window.location.href = "/admin"
+          break
+        default:
+          // Stay on home page
+          break
+      }
+    }
+  }, [user, profile, loading])
+
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -37,7 +56,6 @@ export default function HomePage() {
 
   return (
     <>
-      <RedirectHandler />
       <div className="min-h-screen bg-gradient-to-br from-green-50 to-blue-50">
         {/* Header */}
         <header className="bg-white shadow-sm border-b">
