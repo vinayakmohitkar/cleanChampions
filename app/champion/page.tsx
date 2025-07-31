@@ -75,31 +75,6 @@ export default function ChampionDashboard() {
     }
   }, [user, profile])
 
-  useEffect(() => {
-    if (!authLoading) {
-      if (!user || !profile) {
-        console.log("No user or profile, redirecting to home")
-        window.location.href = "/"
-        return
-      }
-      if (profile.user_type !== "champion") {
-        console.log(`User type ${profile.user_type} not allowed on champion page, redirecting`)
-        // Redirect to correct dashboard
-        switch (profile.user_type) {
-          case "worker":
-            window.location.href = "/worker"
-            break
-          case "admin":
-            window.location.href = "/admin"
-            break
-          default:
-            window.location.href = "/"
-        }
-        return
-      }
-    }
-  }, [user, profile, authLoading])
-
   const getCurrentLocation = () => {
     if (navigator.geolocation) {
       navigator.geolocation.getCurrentPosition(
@@ -111,7 +86,7 @@ export default function ChampionDashboard() {
         },
         (error) => {
           console.error("Error getting location:", error)
-          // Default to Nottingham coordinates instead of London
+          // Default to Nottingham coordinates
           setCurrentLocation({ lat: 52.9548, lng: -1.1581 })
         },
       )
@@ -231,6 +206,7 @@ export default function ChampionDashboard() {
     }
   }
 
+  // Show loading state
   if (authLoading || loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-green-50">
@@ -242,15 +218,57 @@ export default function ChampionDashboard() {
     )
   }
 
+  // Show login prompt if not authenticated
   if (!user || !profile) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-center">
-          <h1 className="text-2xl font-bold text-gray-900 mb-2">Access Denied</h1>
-          <p className="text-gray-600 mb-4">Please log in to access the champion dashboard.</p>
-          <a href="/" className="text-blue-600 hover:underline">
-            Go to Home
+      <div className="min-h-screen flex items-center justify-center bg-green-50">
+        <div className="text-center max-w-md mx-auto p-8">
+          <Award className="h-16 w-16 text-green-600 mx-auto mb-4" />
+          <h1 className="text-2xl font-bold text-gray-900 mb-2">Champion Dashboard</h1>
+          <p className="text-gray-600 mb-6">Please log in as a Clean Champion to access this dashboard.</p>
+          <a
+            href="/"
+            className="inline-block bg-green-600 text-white px-6 py-3 rounded-lg hover:bg-green-700 transition-colors"
+          >
+            Go to Login
           </a>
+        </div>
+      </div>
+    )
+  }
+
+  // Show access denied if wrong user type
+  if (profile.user_type !== "champion") {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-green-50">
+        <div className="text-center max-w-md mx-auto p-8">
+          <Award className="h-16 w-16 text-red-500 mx-auto mb-4" />
+          <h1 className="text-2xl font-bold text-gray-900 mb-2">Access Denied</h1>
+          <p className="text-gray-600 mb-6">This dashboard is only for Clean Champions.</p>
+          <div className="space-x-4">
+            <a
+              href="/"
+              className="inline-block bg-gray-600 text-white px-6 py-3 rounded-lg hover:bg-gray-700 transition-colors"
+            >
+              Go Home
+            </a>
+            {profile.user_type === "worker" && (
+              <a
+                href="/worker"
+                className="inline-block bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 transition-colors"
+              >
+                Worker Dashboard
+              </a>
+            )}
+            {profile.user_type === "admin" && (
+              <a
+                href="/admin"
+                className="inline-block bg-purple-600 text-white px-6 py-3 rounded-lg hover:bg-purple-700 transition-colors"
+              >
+                Admin Dashboard
+              </a>
+            )}
+          </div>
         </div>
       </div>
     )

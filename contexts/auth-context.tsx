@@ -71,14 +71,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setUser(currentUser)
 
       if (currentUser && event === "SIGNED_IN") {
+        // Don't set loading here - let the profile fetch complete
         await fetchProfile(currentUser.id)
         sessionManager.startSession(() => signOut())
       } else if (event === "SIGNED_OUT") {
         setProfile(null)
         sessionManager.clearSession()
-      }
-
-      if (event !== "INITIAL_SESSION") {
         setLoading(false)
       }
     })
@@ -97,19 +95,26 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       if (error && error.code === "PGRST116") {
         console.log("Profile not found")
+        setProfile(null)
+        setLoading(false)
         return null
       }
 
       if (error) {
         console.error("Error fetching profile:", error)
+        setProfile(null)
+        setLoading(false)
         return null
       }
 
       console.log("Profile fetched successfully:", data)
       setProfile(data)
+      setLoading(false)
       return data
     } catch (error) {
       console.error("Error in fetchProfile:", error)
+      setProfile(null)
+      setLoading(false)
       return null
     }
   }
@@ -117,7 +122,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const signIn = async (email: string, password: string) => {
     try {
       console.log("Attempting to sign in:", email)
-      setLoading(true)
 
       const { data, error } = await supabase.auth.signInWithPassword({
         email,
@@ -126,25 +130,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       if (error) {
         console.error("Sign in error:", error)
-        setLoading(false)
         return { error }
       }
 
       console.log("Sign in successful, user:", data.user?.email)
-
-      // Fetch profile immediately after successful login
-      if (data.user) {
-        const profileData = await fetchProfile(data.user.id)
-        if (profileData) {
-          console.log("Profile loaded, user type:", profileData.user_type)
-        }
-      }
-
-      setLoading(false)
       return { error: null }
     } catch (error) {
       console.error("Error in signIn:", error)
-      setLoading(false)
       return { error }
     }
   }
@@ -152,7 +144,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const signUp = async (email: string, password: string, userData: any) => {
     try {
       console.log("Attempting to sign up:", email, "as", userData.userType)
-      setLoading(true)
 
       const { data, error } = await supabase.auth.signUp({
         email,
@@ -164,7 +155,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       if (error) {
         console.error("Sign up error:", error)
-        setLoading(false)
         return { error }
       }
 
@@ -188,7 +178,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
         if (profileError) {
           console.error("Error creating profile:", profileError)
-          setLoading(false)
           return { error: profileError }
         }
 
@@ -196,11 +185,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setProfile(profileData)
       }
 
-      setLoading(false)
       return { error: null }
     } catch (error) {
       console.error("Error in signUp:", error)
-      setLoading(false)
       return { error }
     }
   }

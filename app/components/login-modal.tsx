@@ -70,27 +70,6 @@ export default function LoginModal({ isOpen, userType, onClose }: LoginModalProp
       if (isLogin) {
         const { error } = await signIn(formData.email, formData.password)
         if (error) throw error
-
-        // Close modal and let the auth context handle redirect
-        onClose()
-
-        // Small delay to let auth context process the login
-        setTimeout(() => {
-          // Redirect based on user type
-          switch (userType) {
-            case "champion":
-              window.location.href = "/champion"
-              break
-            case "worker":
-              window.location.href = "/worker"
-              break
-            case "admin":
-              window.location.href = "/admin"
-              break
-            default:
-              window.location.href = "/"
-          }
-        }, 500)
       } else {
         const { error } = await signUp(formData.email, formData.password, {
           name: formData.name,
@@ -99,29 +78,29 @@ export default function LoginModal({ isOpen, userType, onClose }: LoginModalProp
           userType: userType,
         })
         if (error) throw error
-
-        onClose()
-
-        // Redirect after signup
-        setTimeout(() => {
-          switch (userType) {
-            case "champion":
-              window.location.href = "/champion"
-              break
-            case "worker":
-              window.location.href = "/worker"
-              break
-            case "admin":
-              window.location.href = "/admin"
-              break
-            default:
-              window.location.href = "/"
-          }
-        }, 500)
       }
+
+      // Close modal immediately
+      onClose()
+
+      // Wait a bit for auth to process, then redirect
+      setTimeout(() => {
+        switch (userType) {
+          case "champion":
+            window.location.href = "/champion"
+            break
+          case "worker":
+            window.location.href = "/worker"
+            break
+          case "admin":
+            window.location.href = "/admin"
+            break
+          default:
+            window.location.href = "/"
+        }
+      }, 1000) // Give more time for auth to process
     } catch (error: any) {
       setError(error.message)
-    } finally {
       setIsLoading(false)
     }
   }
@@ -189,11 +168,7 @@ export default function LoginModal({ isOpen, userType, onClose }: LoginModalProp
                   </div>
                 </div>
 
-                <Button
-                  type="submit"
-                  disabled={isLoading}
-                  className={`w-full bg-${userInfo.color}-600 hover:bg-${userInfo.color}-700`}
-                >
+                <Button type="submit" disabled={isLoading} className="w-full bg-blue-600 hover:bg-blue-700">
                   {isLoading ? "Signing in..." : "Sign In"}
                 </Button>
               </form>
@@ -284,11 +259,7 @@ export default function LoginModal({ isOpen, userType, onClose }: LoginModalProp
                   </div>
                 </div>
 
-                <Button
-                  type="submit"
-                  disabled={isLoading}
-                  className={`w-full bg-${userInfo.color}-600 hover:bg-${userInfo.color}-700`}
-                >
+                <Button type="submit" disabled={isLoading} className="w-full bg-blue-600 hover:bg-blue-700">
                   {isLoading ? "Creating account..." : "Create Account"}
                 </Button>
               </form>
@@ -298,6 +269,14 @@ export default function LoginModal({ isOpen, userType, onClose }: LoginModalProp
           {error && (
             <div className="mt-4 p-3 bg-red-50 border border-red-200 rounded-lg">
               <p className="text-sm text-red-800">{error}</p>
+            </div>
+          )}
+
+          {isLoading && (
+            <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+              <p className="text-sm text-blue-800">
+                {isLogin ? "Signing you in..." : "Creating your account..."} Please wait...
+              </p>
             </div>
           )}
 

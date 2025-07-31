@@ -2,10 +2,7 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Import Leaflet CSS */
-@import "https://unpkg.com/leaflet@1.9.4/dist/leaflet.css";
-
-/* Fix for Leaflet marker icons */
+/* Leaflet marker fixes - no @import needed as we load it in layout */
 .leaflet-marker-icon {
   margin-left: -12px !important;
   margin-top: -41px !important;
