@@ -45,35 +45,9 @@ export default function WorkerDashboard() {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    if (user && profile) {
-      fetchCollections()
-    }
-  }, [user, profile])
-
-  useEffect(() => {
-    if (!authLoading) {
-      if (!user || !profile) {
-        console.log("No user or profile, redirecting to home")
-        window.location.href = "/"
-        return
-      }
-      if (profile.user_type !== "worker") {
-        console.log(`User type ${profile.user_type} not allowed on worker page, redirecting`)
-        // Redirect to correct dashboard
-        switch (profile.user_type) {
-          case "champion":
-            window.location.href = "/champion"
-            break
-          case "admin":
-            window.location.href = "/admin"
-            break
-          default:
-            window.location.href = "/"
-        }
-        return
-      }
-    }
-  }, [user, profile, authLoading])
+    // Always try to fetch collections, regardless of auth state
+    fetchCollections()
+  }, [])
 
   const fetchCollections = async () => {
     try {
@@ -103,12 +77,17 @@ export default function WorkerDashboard() {
   }
 
   const markAsCollected = async (collectionId: string) => {
+    if (!user) {
+      alert("Please log in to mark collections as completed.")
+      return
+    }
+
     try {
       const { error } = await supabase
         .from("bag_collections")
         .update({
           collected: true,
-          collected_by: user!.id,
+          collected_by: user.id,
           collected_at: new Date().toISOString(),
         })
         .eq("id", collectionId)
@@ -123,6 +102,7 @@ export default function WorkerDashboard() {
     }
   }
 
+  // Show loading state
   if (authLoading || loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-blue-50">
@@ -134,29 +114,57 @@ export default function WorkerDashboard() {
     )
   }
 
+  // Show login prompt if not authenticated
   if (!user || !profile) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-center">
-          <h1 className="text-2xl font-bold text-gray-900 mb-2">Access Denied</h1>
-          <p className="text-gray-600 mb-4">Please log in to access the worker dashboard.</p>
-          <a href="/" className="text-blue-600 hover:underline">
-            Go to Home
+      <div className="min-h-screen flex items-center justify-center bg-blue-50">
+        <div className="text-center max-w-md mx-auto p-8">
+          <Truck className="h-16 w-16 text-blue-600 mx-auto mb-4" />
+          <h1 className="text-2xl font-bold text-gray-900 mb-2">Worker Dashboard</h1>
+          <p className="text-gray-600 mb-6">Please log in as a council worker to access this dashboard.</p>
+          <a
+            href="/"
+            className="inline-block bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 transition-colors"
+          >
+            Go to Login
           </a>
         </div>
       </div>
     )
   }
 
+  // Show access denied if wrong user type
   if (profile.user_type !== "worker") {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-center">
+      <div className="min-h-screen flex items-center justify-center bg-blue-50">
+        <div className="text-center max-w-md mx-auto p-8">
+          <Truck className="h-16 w-16 text-red-500 mx-auto mb-4" />
           <h1 className="text-2xl font-bold text-gray-900 mb-2">Access Denied</h1>
-          <p className="text-gray-600 mb-4">You don't have worker privileges.</p>
-          <a href="/" className="text-blue-600 hover:underline">
-            Go to Home
-          </a>
+          <p className="text-gray-600 mb-6">This dashboard is only for council workers.</p>
+          <div className="space-x-4">
+            <a
+              href="/"
+              className="inline-block bg-gray-600 text-white px-6 py-3 rounded-lg hover:bg-gray-700 transition-colors"
+            >
+              Go Home
+            </a>
+            {profile.user_type === "champion" && (
+              <a
+                href="/champion"
+                className="inline-block bg-green-600 text-white px-6 py-3 rounded-lg hover:bg-green-700 transition-colors"
+              >
+                Champion Dashboard
+              </a>
+            )}
+            {profile.user_type === "admin" && (
+              <a
+                href="/admin"
+                className="inline-block bg-purple-600 text-white px-6 py-3 rounded-lg hover:bg-purple-700 transition-colors"
+              >
+                Admin Dashboard
+              </a>
+            )}
+          </div>
         </div>
       </div>
     )
@@ -179,7 +187,7 @@ export default function WorkerDashboard() {
               </div>
               <div>
                 <h1 className="text-2xl font-bold text-blue-900">Council Worker Dashboard</h1>
-                <p className="text-blue-700">Collection Management System 🚛</p>
+                <p className="text-blue-700">Welcome, {profile.full_name}! 🚛</p>
               </div>
             </div>
             <div className="flex items-center space-x-4">
@@ -281,7 +289,7 @@ export default function WorkerDashboard() {
               <CardContent className="pt-6">
                 <div className="h-96 rounded-lg overflow-hidden border border-blue-200">
                   <MapComponent
-                    center={{ lat: 52.9548, lng: -1.1581 }} // Nottingham coordinates
+                    center={{ lat: 52.9548, lng: -1.1581 }}
                     collections={collections}
                     showAllCollections={true}
                     className="border-0"

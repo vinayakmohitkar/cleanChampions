@@ -1,7 +1,6 @@
 "use client"
 
 import type React from "react"
-
 import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -71,16 +70,55 @@ export default function LoginModal({ isOpen, userType, onClose }: LoginModalProp
       if (isLogin) {
         const { error } = await signIn(formData.email, formData.password)
         if (error) throw error
+
+        // Close modal and let the auth context handle redirect
+        onClose()
+
+        // Small delay to let auth context process the login
+        setTimeout(() => {
+          // Redirect based on user type
+          switch (userType) {
+            case "champion":
+              window.location.href = "/champion"
+              break
+            case "worker":
+              window.location.href = "/worker"
+              break
+            case "admin":
+              window.location.href = "/admin"
+              break
+            default:
+              window.location.href = "/"
+          }
+        }, 500)
       } else {
         const { error } = await signUp(formData.email, formData.password, {
           name: formData.name,
           phone: formData.phone,
           area: formData.area,
-          userType: userType, // Make sure this matches the button clicked
+          userType: userType,
         })
         if (error) throw error
+
+        onClose()
+
+        // Redirect after signup
+        setTimeout(() => {
+          switch (userType) {
+            case "champion":
+              window.location.href = "/champion"
+              break
+            case "worker":
+              window.location.href = "/worker"
+              break
+            case "admin":
+              window.location.href = "/admin"
+              break
+            default:
+              window.location.href = "/"
+          }
+        }, 500)
       }
-      onClose()
     } catch (error: any) {
       setError(error.message)
     } finally {
@@ -156,7 +194,7 @@ export default function LoginModal({ isOpen, userType, onClose }: LoginModalProp
                   disabled={isLoading}
                   className={`w-full bg-${userInfo.color}-600 hover:bg-${userInfo.color}-700`}
                 >
-                  {isLoading ? "Loading..." : isLogin ? "Sign In" : "Create Account"}
+                  {isLoading ? "Signing in..." : "Sign In"}
                 </Button>
               </form>
             </TabsContent>
@@ -251,7 +289,7 @@ export default function LoginModal({ isOpen, userType, onClose }: LoginModalProp
                   disabled={isLoading}
                   className={`w-full bg-${userInfo.color}-600 hover:bg-${userInfo.color}-700`}
                 >
-                  {isLoading ? "Loading..." : isLogin ? "Create Account" : "Create Account"}
+                  {isLoading ? "Creating account..." : "Create Account"}
                 </Button>
               </form>
             </TabsContent>

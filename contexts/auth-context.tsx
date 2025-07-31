@@ -50,7 +50,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
         if (currentUser) {
           await fetchProfile(currentUser.id)
-          // Start session management
           sessionManager.startSession(() => signOut())
         }
       } catch (error) {
@@ -71,14 +70,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const currentUser = session?.user ?? null
       setUser(currentUser)
 
-      if (currentUser) {
+      if (currentUser && event === "SIGNED_IN") {
         await fetchProfile(currentUser.id)
         sessionManager.startSession(() => signOut())
-      } else {
+      } else if (event === "SIGNED_OUT") {
         setProfile(null)
         sessionManager.clearSession()
       }
-      setLoading(false)
+
+      if (event !== "INITIAL_SESSION") {
+        setLoading(false)
+      }
     })
 
     return () => {
@@ -94,25 +96,29 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const { data, error } = await supabase.from("profiles").select("*").eq("id", userId).single()
 
       if (error && error.code === "PGRST116") {
-        console.log("Profile not found, will be created on signup")
-        return
+        console.log("Profile not found")
+        return null
       }
 
       if (error) {
         console.error("Error fetching profile:", error)
-        return
+        return null
       }
 
       console.log("Profile fetched successfully:", data)
       setProfile(data)
+      return data
     } catch (error) {
       console.error("Error in fetchProfile:", error)
+      return null
     }
   }
 
   const signIn = async (email: string, password: string) => {
     try {
       console.log("Attempting to sign in:", email)
+      setLoading(true)
+
       const { data, error } = await supabase.auth.signInWithPassword({
         email,
         password,
@@ -120,13 +126,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       if (error) {
         console.error("Sign in error:", error)
+        setLoading(false)
         return { error }
       }
 
       console.log("Sign in successful, user:", data.user?.email)
+
+      // Fetch profile immediately after successful login
+      if (data.user) {
+        const profileData = await fetchProfile(data.user.id)
+        if (profileData) {
+          console.log("Profile loaded, user type:", profileData.user_type)
+        }
+      }
+
+      setLoading(false)
       return { error: null }
     } catch (error) {
       console.error("Error in signIn:", error)
+      setLoading(false)
       return { error }
     }
   }
@@ -134,6 +152,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const signUp = async (email: string, password: string, userData: any) => {
     try {
       console.log("Attempting to sign up:", email, "as", userData.userType)
+      setLoading(true)
 
       const { data, error } = await supabase.auth.signUp({
         email,
@@ -145,6 +164,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       if (error) {
         console.error("Sign up error:", error)
+        setLoading(false)
         return { error }
       }
 
@@ -168,6 +188,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
         if (profileError) {
           console.error("Error creating profile:", profileError)
+          setLoading(false)
           return { error: profileError }
         }
 
@@ -175,9 +196,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setProfile(profileData)
       }
 
+      setLoading(false)
       return { error: null }
     } catch (error) {
       console.error("Error in signUp:", error)
+      setLoading(false)
       return { error }
     }
   }
@@ -187,33 +210,27 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       console.log("Signing out user...")
       sessionManager.clearSession()
 
-      // Sign out from Supabase
       await supabase.auth.signOut()
 
-      // Clear state
       setProfile(null)
       setUser(null)
 
-      // Clear all storage and cookies
+      // Clear storage and cookies
       localStorage.clear()
       sessionStorage.clear()
 
-      // Clear cookies more thoroughly
       const cookies = document.cookie.split(";")
       for (const cookie of cookies) {
         const eqPos = cookie.indexOf("=")
         const name = eqPos > -1 ? cookie.substr(0, eqPos).trim() : cookie.trim()
-        // Clear for current domain and all subdomains
         document.cookie = `${name}=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/`
         document.cookie = `${name}=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/;domain=${window.location.hostname}`
         document.cookie = `${name}=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/;domain=.${window.location.hostname}`
       }
 
-      // Force redirect to home
       window.location.href = "/"
     } catch (error) {
       console.error("Error signing out:", error)
-      // Force redirect even if there's an error
       window.location.href = "/"
     }
   }

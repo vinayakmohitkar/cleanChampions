@@ -38,17 +38,14 @@ export default function MapComponent({
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    if (!mapRef.current) return
-
     let isMounted = true
 
     const initMap = async () => {
+      if (!mapRef.current) return
+
       try {
         setIsLoading(true)
         setError(null)
-
-        // Dynamic import of Leaflet
-        const L = (await import("leaflet")).default
 
         // Clean up existing map
         if (mapInstanceRef.current) {
@@ -56,33 +53,31 @@ export default function MapComponent({
           mapInstanceRef.current = null
         }
 
+        // Wait a bit for cleanup
+        await new Promise((resolve) => setTimeout(resolve, 100))
+
         if (!isMounted) return
 
-        // Fix for default markers in Leaflet
+        // Import Leaflet dynamically
+        const L = (await import("leaflet")).default
+
+        // Fix marker icons
         delete (L.Icon.Default.prototype as any)._getIconUrl
         L.Icon.Default.mergeOptions({
-          iconRetinaUrl: "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-icon-2x.png",
-          iconUrl: "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-icon.png",
-          shadowUrl: "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-shadow.png",
+          iconRetinaUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png",
+          iconUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png",
+          shadowUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
         })
 
-        // Determine map center - default to Nottingham if using London coordinates
-        const mapCenter =
-          center.lat === 51.5074 && center.lng === -0.1278
-            ? { lat: 52.9548, lng: -1.1581 } // Nottingham coordinates
-            : center
+        // Use Nottingham as default center
+        const mapCenter = center.lat === 51.5074 && center.lng === -0.1278 ? { lat: 52.9548, lng: -1.1581 } : center
 
-        // Initialize map
-        const map = L.map(mapRef.current!, {
+        // Create map
+        const map = L.map(mapRef.current, {
           center: [mapCenter.lat, mapCenter.lng],
           zoom: 12,
-          zoomControl: true,
           scrollWheelZoom: true,
-          doubleClickZoom: true,
-          boxZoom: true,
-          keyboard: true,
-          dragging: true,
-          touchZoom: true,
+          zoomControl: true,
         })
 
         if (!isMounted) {
@@ -92,156 +87,120 @@ export default function MapComponent({
 
         // Add tile layer
         L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-          attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
-          maxZoom: 19,
-          minZoom: 3,
+          attribution: "© OpenStreetMap contributors",
+          maxZoom: 18,
         }).addTo(map)
 
         mapInstanceRef.current = map
 
-        // Add postcode highlight if provided
-        if (highlightPostcode && collections.length > 0) {
-          const postcodeCollections = collections.filter((c) => c.postcode === highlightPostcode)
-
-          if (postcodeCollections.length > 0) {
-            // Calculate center of postcode collections
-            const avgLat = postcodeCollections.reduce((sum, c) => sum + c.location_lat, 0) / postcodeCollections.length
-            const avgLng = postcodeCollections.reduce((sum, c) => sum + c.location_lng, 0) / postcodeCollections.length
-
-            // Create highlight circle
-            const circle = L.circle([avgLat, avgLng], {
-              color: "#3b82f6",
-              fillColor: "#3b82f6",
-              fillOpacity: 0.15,
-              weight: 3,
-              radius: 800,
-            }).addTo(map)
-
-            circle.bindPopup(`
-              <div style="text-align: center; padding: 8px; min-width: 150px;">
-                <h4 style="margin: 0 0 4px 0; color: #1f2937; font-weight: 600;">${highlightPostcode}</h4>
-                <p style="margin: 0; font-size: 12px; color: #6b7280;">Highlighted Area</p>
-                <p style="margin: 4px 0 0 0; font-size: 12px; color: #3b82f6;">
-                  ${postcodeCollections.length} collection${postcodeCollections.length > 1 ? "s" : ""} here
-                </p>
-              </div>
-            `)
-
-            // Center map on this postcode area
-            map.setView([avgLat, avgLng], 14)
-          }
-        }
-
-        // Add click handler for location selection
+        // Add click handler
         if (onLocationSelect) {
           map.on("click", (e: any) => {
             onLocationSelect(e.latlng.lat, e.latlng.lng)
           })
         }
 
+        // Add postcode highlight
+        if (highlightPostcode && collections.length > 0) {
+          const postcodeCollections = collections.filter((c) => c.postcode === highlightPostcode)
+
+          if (postcodeCollections.length > 0) {
+            const avgLat = postcodeCollections.reduce((sum, c) => sum + c.location_lat, 0) / postcodeCollections.length
+            const avgLng = postcodeCollections.reduce((sum, c) => sum + c.location_lng, 0) / postcodeCollections.length
+
+            L.circle([avgLat, avgLng], {
+              color: "#3b82f6",
+              fillColor: "#3b82f6",
+              fillOpacity: 0.15,
+              weight: 3,
+              radius: 800,
+            })
+              .addTo(map)
+              .bindPopup(`
+              <div style="text-align: center; padding: 8px;">
+                <h4 style="margin: 0 0 4px 0;">${highlightPostcode}</h4>
+                <p style="margin: 0; font-size: 12px;">Highlighted Area</p>
+              </div>
+            `)
+
+            map.setView([avgLat, avgLng], 14)
+          }
+        }
+
         // Add collection markers
-        const markers: any[] = []
         collections.forEach((collection) => {
           const isHighlighted = highlightPostcode && collection.postcode === highlightPostcode
 
-          // Create custom icon
-          const iconHtml = `
-            <div style="
-              width: ${isHighlighted ? "32px" : "28px"}; 
-              height: ${isHighlighted ? "32px" : "28px"}; 
-              border-radius: 50%; 
-              display: flex; 
-              align-items: center; 
-              justify-content: center; 
-              color: white; 
-              font-size: ${isHighlighted ? "14px" : "12px"}; 
-              font-weight: bold; 
-              border: ${isHighlighted ? "4px solid #fbbf24" : "2px solid white"};
-              box-shadow: 0 2px 6px rgba(0,0,0,0.3);
-              background-color: ${collection.collected ? "#10b981" : "#ef4444"};
-              position: relative;
-              z-index: ${isHighlighted ? "1000" : "100"};
-            ">
-              ${collection.bag_count}
-            </div>
-          `
+          // Create simple colored marker
+          const markerColor = collection.collected ? "#10b981" : "#ef4444"
+          const markerSize = isHighlighted ? 32 : 24
 
           const icon = L.divIcon({
-            html: iconHtml,
-            className: "custom-collection-marker",
-            iconSize: [isHighlighted ? 32 : 28, isHighlighted ? 32 : 28],
-            iconAnchor: [isHighlighted ? 16 : 14, isHighlighted ? 16 : 14],
+            html: `
+              <div style="
+                width: ${markerSize}px; 
+                height: ${markerSize}px; 
+                border-radius: 50%; 
+                background-color: ${markerColor};
+                border: 2px solid white;
+                box-shadow: 0 2px 4px rgba(0,0,0,0.3);
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                color: white;
+                font-weight: bold;
+                font-size: ${markerSize > 24 ? "12px" : "10px"};
+              ">
+                ${collection.bag_count}
+              </div>
+            `,
+            className: "custom-marker",
+            iconSize: [markerSize, markerSize],
+            iconAnchor: [markerSize / 2, markerSize / 2],
           })
 
           const marker = L.marker([collection.location_lat, collection.location_lng], { icon })
 
-          // Create popup content
-          const popupContent = `
-            <div style="padding: 12px; min-width: 220px; font-family: system-ui, -apple-system, sans-serif;">
-              <h3 style="font-weight: 600; margin-bottom: 8px; color: #1f2937; font-size: 16px;">
+          marker.bindPopup(`
+            <div style="padding: 8px; min-width: 200px;">
+              <h3 style="margin: 0 0 8px 0; font-size: 14px; font-weight: bold;">
                 ${collection.location_name}
               </h3>
-              ${
-                collection.postcode
-                  ? `
-                <div style="margin-bottom: 8px;">
-                  <span style="
-                    background-color: #3b82f6; 
-                    color: white; 
-                    padding: 2px 8px; 
-                    border-radius: 12px; 
-                    font-size: 12px; 
-                    font-weight: 500;
-                  ">${collection.postcode}</span>
-                </div>
-              `
-                  : ""
-              }
-              <p style="font-size: 14px; color: #6b7280; margin-bottom: 8px; line-height: 1.4;">
-                ${collection.area_cleaned}
+              ${collection.postcode ? `<p style="margin: 0 0 4px 0; font-size: 12px; color: #666;">${collection.postcode}</p>` : ""}
+              <p style="margin: 0 0 4px 0; font-size: 12px;">${collection.area_cleaned}</p>
+              <p style="margin: 0 0 4px 0; font-size: 12px;">
+                <strong>${collection.bag_count}</strong> bag${collection.bag_count > 1 ? "s" : ""}
               </p>
-              <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
-                <p style="font-size: 14px; margin: 0; font-weight: 500;">
-                  <strong>${collection.bag_count}</strong> bag${collection.bag_count > 1 ? "s" : ""}
-                </p>
-                <p style="font-size: 12px; color: #9ca3af; margin: 0;">
-                  ${new Date(collection.created_at).toLocaleDateString()}
-                </p>
-              </div>
-              <div style="text-align: center;">
+              <p style="margin: 0; font-size: 11px; color: #999;">
+                ${new Date(collection.created_at).toLocaleDateString()}
+              </p>
+              <div style="margin-top: 8px; text-align: center;">
                 <span style="
-                  display: inline-block; 
-                  padding: 6px 12px; 
-                  font-size: 12px; 
-                  border-radius: 6px; 
-                  font-weight: 500;
-                  ${
-                    collection.collected
-                      ? "background-color: #d1fae5; color: #065f46; border: 1px solid #10b981;"
-                      : "background-color: #fee2e2; color: #991b1b; border: 1px solid #ef4444;"
-                  }
+                  padding: 4px 8px; 
+                  border-radius: 4px; 
+                  font-size: 11px; 
+                  color: white;
+                  background-color: ${collection.collected ? "#10b981" : "#ef4444"};
                 ">
-                  ${collection.collected ? "✅ Collected" : "⏳ Pending Collection"}
+                  ${collection.collected ? "✅ Collected" : "⏳ Pending"}
                 </span>
               </div>
             </div>
-          `
+          `)
 
-          marker.bindPopup(popupContent)
           marker.addTo(map)
-          markers.push(marker)
         })
 
-        // Fit map to show all markers if we have collections and no specific highlight
+        // Fit bounds if we have collections
         if (collections.length > 0 && !highlightPostcode) {
-          const group = new L.featureGroup(markers)
+          const group = new L.featureGroup(collections.map((c) => L.marker([c.location_lat, c.location_lng])))
           map.fitBounds(group.getBounds().pad(0.1))
         }
 
         setIsLoading(false)
       } catch (error) {
-        console.error("Error loading map:", error)
-        setError("Failed to load map. Please check your internet connection.")
+        console.error("Map initialization error:", error)
+        setError("Failed to load map")
         setIsLoading(false)
       }
     }
@@ -251,7 +210,11 @@ export default function MapComponent({
     return () => {
       isMounted = false
       if (mapInstanceRef.current) {
-        mapInstanceRef.current.remove()
+        try {
+          mapInstanceRef.current.remove()
+        } catch (e) {
+          console.log("Error cleaning up map:", e)
+        }
         mapInstanceRef.current = null
       }
     }
@@ -260,12 +223,18 @@ export default function MapComponent({
   if (error) {
     return (
       <div
-        className={`w-full h-full flex items-center justify-center bg-gray-100 rounded-lg border-2 border-dashed border-gray-300 ${className}`}
+        className={`w-full h-full min-h-[300px] flex items-center justify-center bg-gray-100 rounded-lg border ${className}`}
       >
         <div className="text-center p-8">
           <div className="text-4xl mb-4">🗺️</div>
           <p className="text-gray-600 font-medium mb-2">Map Error</p>
           <p className="text-sm text-gray-500">{error}</p>
+          <button
+            onClick={() => window.location.reload()}
+            className="mt-4 px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+          >
+            Reload Page
+          </button>
         </div>
       </div>
     )
@@ -273,7 +242,9 @@ export default function MapComponent({
 
   if (isLoading) {
     return (
-      <div className={`w-full h-full flex items-center justify-center bg-gray-100 rounded-lg ${className}`}>
+      <div
+        className={`w-full h-full min-h-[300px] flex items-center justify-center bg-gray-100 rounded-lg ${className}`}
+      >
         <div className="text-center">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4"></div>
           <p className="text-gray-600">Loading map...</p>
@@ -285,7 +256,7 @@ export default function MapComponent({
   return (
     <div
       ref={mapRef}
-      className={`w-full h-full min-h-[300px] rounded-lg overflow-hidden ${className}`}
+      className={`w-full h-full min-h-[300px] rounded-lg ${className}`}
       style={{ minHeight: "300px" }}
     />
   )
