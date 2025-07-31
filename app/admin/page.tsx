@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Users, Trash2, Package, Shield, LogOut, CheckCircle, Clock, BarChart3, Settings } from "lucide-react"
+import { Users, Trash2, Package, Shield, LogOut, CheckCircle, Clock, BarChart3, Settings, Home } from "lucide-react"
 
 type Profile = {
   id: string
@@ -199,6 +199,10 @@ export default function AdminDashboard() {
               </div>
             </div>
             <div className="flex items-center space-x-4">
+              <a href="/" className="text-sm text-purple-600 hover:text-purple-800 flex items-center">
+                <Home className="h-4 w-4 mr-1" />
+                Home
+              </a>
               <div className="text-sm text-purple-600">
                 <Clock className="h-4 w-4 inline mr-1" />
                 Session expires in 15 min

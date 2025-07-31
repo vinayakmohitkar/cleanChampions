@@ -4,7 +4,6 @@ import type React from "react"
 import { createContext, useContext, useEffect, useState } from "react"
 import type { User } from "@supabase/supabase-js"
 import { supabase } from "@/lib/supabase"
-import { SessionManager } from "@/lib/session-manager"
 
 type Profile = {
   id: string
@@ -30,7 +29,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
   const [profile, setProfile] = useState<Profile | null>(null)
   const [loading, setLoading] = useState(true)
-  const sessionManager = SessionManager.getInstance()
 
   useEffect(() => {
     // Get initial session
@@ -50,11 +48,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
         if (currentUser) {
           await fetchProfile(currentUser.id)
-          sessionManager.startSession(() => signOut())
+        } else {
+          setLoading(false)
         }
       } catch (error) {
         console.error("Error in getInitialSession:", error)
-      } finally {
         setLoading(false)
       }
     }
@@ -71,19 +69,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setUser(currentUser)
 
       if (currentUser && event === "SIGNED_IN") {
-        // Don't set loading here - let the profile fetch complete
         await fetchProfile(currentUser.id)
-        sessionManager.startSession(() => signOut())
       } else if (event === "SIGNED_OUT") {
         setProfile(null)
-        sessionManager.clearSession()
         setLoading(false)
       }
     })
 
     return () => {
       subscription.unsubscribe()
-      sessionManager.clearSession()
     }
   }, [])
 
@@ -195,30 +189,33 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const signOut = async () => {
     try {
       console.log("Signing out user...")
-      sessionManager.clearSession()
 
       await supabase.auth.signOut()
 
       setProfile(null)
       setUser(null)
 
-      // Clear storage and cookies
-      localStorage.clear()
-      sessionStorage.clear()
-
-      const cookies = document.cookie.split(";")
-      for (const cookie of cookies) {
-        const eqPos = cookie.indexOf("=")
-        const name = eqPos > -1 ? cookie.substr(0, eqPos).trim() : cookie.trim()
-        document.cookie = `${name}=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/`
-        document.cookie = `${name}=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/;domain=${window.location.hostname}`
-        document.cookie = `${name}=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/;domain=.${window.location.hostname}`
+      // Only clear auth-related storage, not all storage
+      const keysToRemove = []
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i)
+        if (key && (key.includes("supabase") || key.includes("auth") || key.includes("session"))) {
+          keysToRemove.push(key)
+        }
       }
+      keysToRemove.forEach((key) => localStorage.removeItem(key))
 
-      window.location.href = "/"
+      // Clear auth cookies only
+      const authCookies = ["sb-access-token", "sb-refresh-token"]
+      authCookies.forEach((cookieName) => {
+        document.cookie = `${cookieName}=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/`
+        document.cookie = `${cookieName}=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/;domain=${window.location.hostname}`
+        document.cookie = `${cookieName}=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/;domain=.${window.location.hostname}`
+      })
+
+      // Don't force redirect - let the user navigate naturally
     } catch (error) {
       console.error("Error signing out:", error)
-      window.location.href = "/"
     }
   }
 

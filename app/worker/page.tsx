@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { MapPin, Trash2, CheckCircle, Clock, LogOut, Truck, Navigation } from "lucide-react"
+import { MapPin, Trash2, CheckCircle, Clock, LogOut, Truck, Navigation, Home } from "lucide-react"
 import dynamic from "next/dynamic"
 
 const MapComponent = dynamic(() => import("@/components/map-component"), {
@@ -45,7 +45,6 @@ export default function WorkerDashboard() {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    // Always try to fetch collections, regardless of auth state
     fetchCollections()
   }, [])
 
@@ -122,12 +121,14 @@ export default function WorkerDashboard() {
           <Truck className="h-16 w-16 text-blue-600 mx-auto mb-4" />
           <h1 className="text-2xl font-bold text-gray-900 mb-2">Worker Dashboard</h1>
           <p className="text-gray-600 mb-6">Please log in as a council worker to access this dashboard.</p>
-          <a
-            href="/"
-            className="inline-block bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 transition-colors"
-          >
-            Go to Login
-          </a>
+          <div className="space-x-4">
+            <a
+              href="/"
+              className="inline-block bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 transition-colors"
+            >
+              Go to Login
+            </a>
+          </div>
         </div>
       </div>
     )
@@ -146,6 +147,7 @@ export default function WorkerDashboard() {
               href="/"
               className="inline-block bg-gray-600 text-white px-6 py-3 rounded-lg hover:bg-gray-700 transition-colors"
             >
+              <Home className="h-4 w-4 inline mr-2" />
               Go Home
             </a>
             {profile.user_type === "champion" && (
@@ -191,10 +193,10 @@ export default function WorkerDashboard() {
               </div>
             </div>
             <div className="flex items-center space-x-4">
-              <div className="text-sm text-blue-600">
-                <Clock className="h-4 w-4 inline mr-1" />
-                Session expires in 15 min
-              </div>
+              <a href="/" className="text-sm text-blue-600 hover:text-blue-800 flex items-center">
+                <Home className="h-4 w-4 mr-1" />
+                Home
+              </a>
               <Button
                 variant="outline"
                 onClick={signOut}

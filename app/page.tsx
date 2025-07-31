@@ -4,7 +4,7 @@ import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { MapPin, Users, Shield, Trash2, Award, Bell } from "lucide-react"
+import { MapPin, Users, Shield, Trash2, Award, Bell, ArrowRight } from "lucide-react"
 import LoginModal from "./components/login-modal"
 import { useAuth } from "@/contexts/auth-context"
 import { supabase } from "@/lib/supabase"
@@ -38,78 +38,70 @@ export default function HomePage() {
     setLoginModal({ isOpen: false, userType: "" })
   }
 
-  // Fetch statistics
+  // Fetch statistics on component mount
   useEffect(() => {
-    const fetchStats = async () => {
-      try {
-        // Get total bags and collections
-        const { data: collections, error: collectionsError } = await supabase
-          .from("bag_collections")
-          .select("bag_count, collected, champion_id")
-
-        if (collectionsError) throw collectionsError
-
-        // Get active champions count
-        const { data: champions, error: championsError } = await supabase
-          .from("profiles")
-          .select("id")
-          .eq("user_type", "champion")
-
-        if (championsError) throw championsError
-
-        // Calculate stats
-        const totalBags = collections?.reduce((sum, collection) => sum + collection.bag_count, 0) || 0
-        const collectedBags =
-          collections?.filter((c) => c.collected).reduce((sum, collection) => sum + collection.bag_count, 0) || 0
-        const activeChampions = champions?.length || 0
-        const areasCleanedCount = collections?.length || 0
-
-        setStats({
-          totalBags,
-          activeChampions,
-          areasCleanedCount,
-          collectedBags,
-        })
-      } catch (error) {
-        console.error("Error fetching stats:", error)
-      } finally {
-        setStatsLoading(false)
-      }
-    }
-
     fetchStats()
   }, [])
 
-  useEffect(() => {
-    if (!loading && user && profile) {
-      // Redirect based on user type
-      switch (profile.user_type) {
-        case "champion":
-          window.location.href = "/champion"
-          break
-        case "worker":
-          window.location.href = "/worker"
-          break
-        case "admin":
-          window.location.href = "/admin"
-          break
-        default:
-          // Stay on home page
-          break
-      }
-    }
-  }, [user, profile, loading])
+  const fetchStats = async () => {
+    try {
+      setStatsLoading(true)
 
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-green-600 mx-auto mb-4"></div>
-          <p>Loading...</p>
-        </div>
-      </div>
-    )
+      // Get total bags and collections
+      const { data: collections, error: collectionsError } = await supabase
+        .from("bag_collections")
+        .select("bag_count, collected, champion_id")
+
+      if (collectionsError) {
+        console.error("Error fetching collections:", collectionsError)
+      }
+
+      // Get active champions count
+      const { data: champions, error: championsError } = await supabase
+        .from("profiles")
+        .select("id")
+        .eq("user_type", "champion")
+
+      if (championsError) {
+        console.error("Error fetching champions:", championsError)
+      }
+
+      // Calculate stats
+      const totalBags = collections?.reduce((sum, collection) => sum + collection.bag_count, 0) || 0
+      const collectedBags =
+        collections?.filter((c) => c.collected).reduce((sum, collection) => sum + collection.bag_count, 0) || 0
+      const activeChampions = champions?.length || 0
+      const areasCleanedCount = collections?.length || 0
+
+      setStats({
+        totalBags,
+        activeChampions,
+        areasCleanedCount,
+        collectedBags,
+      })
+    } catch (error) {
+      console.error("Error fetching stats:", error)
+    } finally {
+      setStatsLoading(false)
+    }
   }
+
+  const getDashboardLink = () => {
+    if (!user || !profile) return null
+
+    switch (profile.user_type) {
+      case "champion":
+        return { href: "/champion", label: "Go to Champion Dashboard", color: "green" }
+      case "worker":
+        return { href: "/worker", label: "Go to Worker Dashboard", color: "blue" }
+      case "admin":
+        return { href: "/admin", label: "Go to Admin Dashboard", color: "purple" }
+      default:
+        return null
+    }
+  }
+
+  const dashboardLink = getDashboardLink()
 
   return (
     <>
@@ -127,9 +119,28 @@ export default function HomePage() {
                   <p className="text-sm text-gray-600">Community Litter Collection</p>
                 </div>
               </div>
-              <Badge variant="secondary" className="bg-green-100 text-green-800">
-                Free Community App
-              </Badge>
+              <div className="flex items-center space-x-4">
+                {user && profile ? (
+                  <div className="flex items-center space-x-3">
+                    <span className="text-sm text-gray-600">
+                      Welcome, <span className="font-medium">{profile.full_name}</span>
+                    </span>
+                    {dashboardLink && (
+                      <a
+                        href={dashboardLink.href}
+                        className={`inline-flex items-center px-3 py-2 rounded-md text-sm font-medium text-white bg-${dashboardLink.color}-600 hover:bg-${dashboardLink.color}-700 transition-colors`}
+                      >
+                        {dashboardLink.label}
+                        <ArrowRight className="ml-2 h-4 w-4" />
+                      </a>
+                    )}
+                  </div>
+                ) : (
+                  <Badge variant="secondary" className="bg-green-100 text-green-800">
+                    Free Community App
+                  </Badge>
+                )}
+              </div>
             </div>
           </div>
         </header>
@@ -146,122 +157,159 @@ export default function HomePage() {
             {/* Real-time Stats */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-12">
               <div className="bg-white p-6 rounded-lg shadow-sm border border-green-200">
-                <div className="text-3xl font-bold text-green-600 mb-2">{statsLoading ? "..." : stats.totalBags}</div>
+                <div className="text-3xl font-bold text-green-600 mb-2">
+                  {statsLoading ? (
+                    <div className="animate-pulse bg-gray-200 h-8 w-16 rounded mx-auto"></div>
+                  ) : (
+                    stats.totalBags
+                  )}
+                </div>
                 <div className="text-gray-600">Total Bags Logged</div>
                 <div className="text-sm text-green-600 mt-1">
-                  {statsLoading ? "..." : stats.collectedBags} collected
+                  {statsLoading ? "..." : `${stats.collectedBags} collected`}
                 </div>
               </div>
               <div className="bg-white p-6 rounded-lg shadow-sm border border-blue-200">
                 <div className="text-3xl font-bold text-blue-600 mb-2">
-                  {statsLoading ? "..." : stats.activeChampions}
+                  {statsLoading ? (
+                    <div className="animate-pulse bg-gray-200 h-8 w-16 rounded mx-auto"></div>
+                  ) : (
+                    stats.activeChampions
+                  )}
                 </div>
                 <div className="text-gray-600">Active Champions</div>
                 <div className="text-sm text-blue-600 mt-1">Community volunteers</div>
               </div>
               <div className="bg-white p-6 rounded-lg shadow-sm border border-purple-200">
                 <div className="text-3xl font-bold text-purple-600 mb-2">
-                  {statsLoading ? "..." : stats.areasCleanedCount}
+                  {statsLoading ? (
+                    <div className="animate-pulse bg-gray-200 h-8 w-16 rounded mx-auto"></div>
+                  ) : (
+                    stats.areasCleanedCount
+                  )}
                 </div>
                 <div className="text-gray-600">Areas Cleaned</div>
                 <div className="text-sm text-purple-600 mt-1">Collection points</div>
               </div>
             </div>
+
+            {/* Show dashboard link for logged in users */}
+            {user && profile && dashboardLink && (
+              <div className="mb-8 p-6 bg-white rounded-lg shadow-sm border border-gray-200">
+                <h3 className="text-lg font-semibold text-gray-900 mb-2">Ready to continue?</h3>
+                <p className="text-gray-600 mb-4">Access your personalized dashboard</p>
+                <a
+                  href={dashboardLink.href}
+                  className="inline-flex items-center px-6 py-3 rounded-lg text-white bg-blue-600 hover:bg-blue-700 transition-colors font-medium"
+                >
+                  {dashboardLink.label}
+                  <ArrowRight className="ml-2 h-5 w-5" />
+                </a>
+              </div>
+            )}
           </div>
         </section>
 
-        {/* User Type Cards */}
-        <section className="py-12 px-4 sm:px-6 lg:px-8 bg-white">
-          <div className="max-w-6xl mx-auto">
-            <h3 className="text-2xl font-bold text-center text-gray-900 mb-8">Choose Your Role</h3>
+        {/* User Type Cards - Only show if not logged in */}
+        {!user && (
+          <section className="py-12 px-4 sm:px-6 lg:px-8 bg-white">
+            <div className="max-w-6xl mx-auto">
+              <h3 className="text-2xl font-bold text-center text-gray-900 mb-8">Choose Your Role</h3>
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-              {/* Clean Champion Card */}
-              <Card className="hover:shadow-lg transition-shadow cursor-pointer border-2 hover:border-green-200">
-                <CardHeader className="text-center">
-                  <div className="mx-auto bg-green-100 p-3 rounded-full w-16 h-16 flex items-center justify-center mb-4">
-                    <Award className="h-8 w-8 text-green-600" />
-                  </div>
-                  <CardTitle className="text-green-700">Clean Champion</CardTitle>
-                  <CardDescription>Community volunteers who collect litter and make a difference</CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-3">
-                  <div className="flex items-center space-x-2 text-sm text-gray-600">
-                    <MapPin className="h-4 w-4" />
-                    <span>Log bag locations with postcodes</span>
-                  </div>
-                  <div className="flex items-center space-x-2 text-sm text-gray-600">
-                    <Trash2 className="h-4 w-4" />
-                    <span>Track your impact</span>
-                  </div>
-                  <div className="flex items-center space-x-2 text-sm text-gray-600">
-                    <Bell className="h-4 w-4" />
-                    <span>Request supplies</span>
-                  </div>
-                  <Button className="w-full mt-4 bg-green-600 hover:bg-green-700" onClick={() => openLogin("champion")}>
-                    Join as Champion
-                  </Button>
-                </CardContent>
-              </Card>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+                {/* Clean Champion Card */}
+                <Card className="hover:shadow-lg transition-shadow cursor-pointer border-2 hover:border-green-200">
+                  <CardHeader className="text-center">
+                    <div className="mx-auto bg-green-100 p-3 rounded-full w-16 h-16 flex items-center justify-center mb-4">
+                      <Award className="h-8 w-8 text-green-600" />
+                    </div>
+                    <CardTitle className="text-green-700">Clean Champion</CardTitle>
+                    <CardDescription>Community volunteers who collect litter and make a difference</CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-3">
+                    <div className="flex items-center space-x-2 text-sm text-gray-600">
+                      <MapPin className="h-4 w-4" />
+                      <span>Log bag locations with postcodes</span>
+                    </div>
+                    <div className="flex items-center space-x-2 text-sm text-gray-600">
+                      <Trash2 className="h-4 w-4" />
+                      <span>Track your impact</span>
+                    </div>
+                    <div className="flex items-center space-x-2 text-sm text-gray-600">
+                      <Bell className="h-4 w-4" />
+                      <span>Request supplies</span>
+                    </div>
+                    <Button
+                      className="w-full mt-4 bg-green-600 hover:bg-green-700"
+                      onClick={() => openLogin("champion")}
+                    >
+                      Join as Champion
+                    </Button>
+                  </CardContent>
+                </Card>
 
-              {/* Council Worker Card */}
-              <Card className="hover:shadow-lg transition-shadow cursor-pointer border-2 hover:border-blue-200">
-                <CardHeader className="text-center">
-                  <div className="mx-auto bg-blue-100 p-3 rounded-full w-16 h-16 flex items-center justify-center mb-4">
-                    <Users className="h-8 w-8 text-blue-600" />
-                  </div>
-                  <CardTitle className="text-blue-700">Council Worker</CardTitle>
-                  <CardDescription>Council staff who collect the purple bags from locations</CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-3">
-                  <div className="flex items-center space-x-2 text-sm text-gray-600">
-                    <MapPin className="h-4 w-4" />
-                    <span>View collection map</span>
-                  </div>
-                  <div className="flex items-center space-x-2 text-sm text-gray-600">
-                    <Trash2 className="h-4 w-4" />
-                    <span>Mark bags collected</span>
-                  </div>
-                  <div className="flex items-center space-x-2 text-sm text-gray-600">
-                    <Bell className="h-4 w-4" />
-                    <span>Route optimization</span>
-                  </div>
-                  <Button className="w-full mt-4 bg-blue-600 hover:bg-blue-700" onClick={() => openLogin("worker")}>
-                    Worker Login
-                  </Button>
-                </CardContent>
-              </Card>
+                {/* Council Worker Card */}
+                <Card className="hover:shadow-lg transition-shadow cursor-pointer border-2 hover:border-blue-200">
+                  <CardHeader className="text-center">
+                    <div className="mx-auto bg-blue-100 p-3 rounded-full w-16 h-16 flex items-center justify-center mb-4">
+                      <Users className="h-8 w-8 text-blue-600" />
+                    </div>
+                    <CardTitle className="text-blue-700">Council Worker</CardTitle>
+                    <CardDescription>Council staff who collect the purple bags from locations</CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-3">
+                    <div className="flex items-center space-x-2 text-sm text-gray-600">
+                      <MapPin className="h-4 w-4" />
+                      <span>View collection map</span>
+                    </div>
+                    <div className="flex items-center space-x-2 text-sm text-gray-600">
+                      <Trash2 className="h-4 w-4" />
+                      <span>Mark bags collected</span>
+                    </div>
+                    <div className="flex items-center space-x-2 text-sm text-gray-600">
+                      <Bell className="h-4 w-4" />
+                      <span>Route optimization</span>
+                    </div>
+                    <Button className="w-full mt-4 bg-blue-600 hover:bg-blue-700" onClick={() => openLogin("worker")}>
+                      Worker Login
+                    </Button>
+                  </CardContent>
+                </Card>
 
-              {/* Admin Card */}
-              <Card className="hover:shadow-lg transition-shadow cursor-pointer border-2 hover:border-purple-200">
-                <CardHeader className="text-center">
-                  <div className="mx-auto bg-purple-100 p-3 rounded-full w-16 h-16 flex items-center justify-center mb-4">
-                    <Shield className="h-8 w-8 text-purple-600" />
-                  </div>
-                  <CardTitle className="text-purple-700">Administrator</CardTitle>
-                  <CardDescription>Council administrators who manage the system and users</CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-3">
-                  <div className="flex items-center space-x-2 text-sm text-gray-600">
-                    <Users className="h-4 w-4" />
-                    <span>Manage users</span>
-                  </div>
-                  <div className="flex items-center space-x-2 text-sm text-gray-600">
-                    <MapPin className="h-4 w-4" />
-                    <span>System analytics</span>
-                  </div>
-                  <div className="flex items-center space-x-2 text-sm text-gray-600">
-                    <Shield className="h-4 w-4" />
-                    <span>Full system control</span>
-                  </div>
-                  <Button className="w-full mt-4 bg-purple-600 hover:bg-purple-700" onClick={() => openLogin("admin")}>
-                    Admin Login
-                  </Button>
-                </CardContent>
-              </Card>
+                {/* Admin Card */}
+                <Card className="hover:shadow-lg transition-shadow cursor-pointer border-2 hover:border-purple-200">
+                  <CardHeader className="text-center">
+                    <div className="mx-auto bg-purple-100 p-3 rounded-full w-16 h-16 flex items-center justify-center mb-4">
+                      <Shield className="h-8 w-8 text-purple-600" />
+                    </div>
+                    <CardTitle className="text-purple-700">Administrator</CardTitle>
+                    <CardDescription>Council administrators who manage the system and users</CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-3">
+                    <div className="flex items-center space-x-2 text-sm text-gray-600">
+                      <Users className="h-4 w-4" />
+                      <span>Manage users</span>
+                    </div>
+                    <div className="flex items-center space-x-2 text-sm text-gray-600">
+                      <MapPin className="h-4 w-4" />
+                      <span>System analytics</span>
+                    </div>
+                    <div className="flex items-center space-x-2 text-sm text-gray-600">
+                      <Shield className="h-4 w-4" />
+                      <span>Full system control</span>
+                    </div>
+                    <Button
+                      className="w-full mt-4 bg-purple-600 hover:bg-purple-700"
+                      onClick={() => openLogin("admin")}
+                    >
+                      Admin Login
+                    </Button>
+                  </CardContent>
+                </Card>
+              </div>
             </div>
-          </div>
-        </section>
+          </section>
+        )}
 
         {/* Features Section */}
         <section className="py-12 px-4 sm:px-6 lg:px-8 bg-gray-50">

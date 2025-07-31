@@ -12,7 +12,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { MapPin, Trash2, Package, Plus, LogOut, Clock, Award } from "lucide-react"
+import { MapPin, Trash2, Package, Plus, LogOut, Clock, Award, Home } from "lucide-react"
 import dynamic from "next/dynamic"
 
 const MapComponent = dynamic(() => import("@/components/map-component"), {
@@ -295,6 +295,10 @@ export default function ChampionDashboard() {
               </div>
             </div>
             <div className="flex items-center space-x-4">
+              <a href="/" className="text-sm text-green-600 hover:text-green-800 flex items-center">
+                <Home className="h-4 w-4 mr-1" />
+                Home
+              </a>
               <div className="text-sm text-green-600">
                 <Clock className="h-4 w-4 inline mr-1" />
                 Session expires in 15 min
