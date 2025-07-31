@@ -1,6 +1,7 @@
 "use client"
 
-import { useEffect, useRef } from "react"
+import { useEffect, useRef, useState } from "react"
+import "leaflet/dist/leaflet.css"
 
 type Collection = {
   id: string
@@ -20,6 +21,7 @@ interface MapComponentProps {
   showAllCollections?: boolean
   onLocationSelect?: (lat: number, lng: number) => void
   highlightPostcode?: string
+  className?: string
 }
 
 export default function MapComponent({
@@ -28,44 +30,77 @@ export default function MapComponent({
   showAllCollections = false,
   onLocationSelect,
   highlightPostcode,
+  className = "",
 }: MapComponentProps) {
   const mapRef = useRef<HTMLDivElement>(null)
   const mapInstanceRef = useRef<any>(null)
+  const [isLoading, setIsLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
     if (!mapRef.current) return
 
+    let isMounted = true
+
     const initMap = async () => {
       try {
+        setIsLoading(true)
+        setError(null)
+
+        // Dynamic import of Leaflet
         const L = (await import("leaflet")).default
 
-        // Fix for default markers
+        // Clean up existing map
+        if (mapInstanceRef.current) {
+          mapInstanceRef.current.remove()
+          mapInstanceRef.current = null
+        }
+
+        if (!isMounted) return
+
+        // Fix for default markers in Leaflet
         delete (L.Icon.Default.prototype as any)._getIconUrl
         L.Icon.Default.mergeOptions({
-          iconRetinaUrl: "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon-2x.png",
-          iconUrl: "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon.png",
-          shadowUrl: "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png",
+          iconRetinaUrl: "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-icon-2x.png",
+          iconUrl: "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-icon.png",
+          shadowUrl: "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-shadow.png",
         })
 
-        // Initialize map with proper center (Nottingham by default)
+        // Determine map center - default to Nottingham if using London coordinates
         const mapCenter =
           center.lat === 51.5074 && center.lng === -0.1278
-            ? { lat: 52.9548, lng: -1.1581 } // Default to Nottingham instead of London
+            ? { lat: 52.9548, lng: -1.1581 } // Nottingham coordinates
             : center
 
-        const map = L.map(mapRef.current!).setView([mapCenter.lat, mapCenter.lng], 12)
+        // Initialize map
+        const map = L.map(mapRef.current!, {
+          center: [mapCenter.lat, mapCenter.lng],
+          zoom: 12,
+          zoomControl: true,
+          scrollWheelZoom: true,
+          doubleClickZoom: true,
+          boxZoom: true,
+          keyboard: true,
+          dragging: true,
+          touchZoom: true,
+        })
 
-        // Add OpenStreetMap tiles
+        if (!isMounted) {
+          map.remove()
+          return
+        }
+
+        // Add tile layer
         L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-          attribution: "© OpenStreetMap contributors",
+          attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
           maxZoom: 19,
+          minZoom: 3,
         }).addTo(map)
 
         mapInstanceRef.current = map
 
         // Add postcode highlight if provided
-        if (highlightPostcode) {
-          // Find collections with this postcode to get the center
+        if (highlightPostcode && collections.length > 0) {
           const postcodeCollections = collections.filter((c) => c.postcode === highlightPostcode)
 
           if (postcodeCollections.length > 0) {
@@ -73,13 +108,13 @@ export default function MapComponent({
             const avgLat = postcodeCollections.reduce((sum, c) => sum + c.location_lat, 0) / postcodeCollections.length
             const avgLng = postcodeCollections.reduce((sum, c) => sum + c.location_lng, 0) / postcodeCollections.length
 
-            // Create a circle to highlight the postcode area
+            // Create highlight circle
             const circle = L.circle([avgLat, avgLng], {
               color: "#3b82f6",
               fillColor: "#3b82f6",
               fillOpacity: 0.15,
               weight: 3,
-              radius: 800, // 800m radius
+              radius: 800,
             }).addTo(map)
 
             circle.bindPopup(`
@@ -94,26 +129,10 @@ export default function MapComponent({
 
             // Center map on this postcode area
             map.setView([avgLat, avgLng], 14)
-          } else {
-            // If no collections yet, just show a general area highlight
-            const circle = L.circle([mapCenter.lat, mapCenter.lng], {
-              color: "#10b981",
-              fillColor: "#10b981",
-              fillOpacity: 0.1,
-              weight: 2,
-              radius: 1000,
-            }).addTo(map)
-
-            circle.bindPopup(`
-              <div style="text-align: center; padding: 8px;">
-                <h4 style="margin: 0 0 4px 0; color: #1f2937; font-weight: 600;">${highlightPostcode}</h4>
-                <p style="margin: 0; font-size: 12px; color: #6b7280;">Target Area</p>
-              </div>
-            `)
           }
         }
 
-        // Add click handler if onLocationSelect is provided
+        // Add click handler for location selection
         if (onLocationSelect) {
           map.on("click", (e: any) => {
             onLocationSelect(e.latlng.lat, e.latlng.lng)
@@ -121,11 +140,13 @@ export default function MapComponent({
         }
 
         // Add collection markers
+        const markers: any[] = []
         collections.forEach((collection) => {
           const isHighlighted = highlightPostcode && collection.postcode === highlightPostcode
 
-          const icon = L.divIcon({
-            html: `<div style="
+          // Create custom icon
+          const iconHtml = `
+            <div style="
               width: ${isHighlighted ? "32px" : "28px"}; 
               height: ${isHighlighted ? "32px" : "28px"}; 
               border-radius: 50%; 
@@ -137,18 +158,26 @@ export default function MapComponent({
               font-weight: bold; 
               border: ${isHighlighted ? "4px solid #fbbf24" : "2px solid white"};
               box-shadow: 0 2px 6px rgba(0,0,0,0.3);
-              ${collection.collected ? "background-color: #10b981;" : "background-color: #ef4444;"}
-              ${isHighlighted ? "transform: scale(1.1); z-index: 1000;" : ""}
-            ">${collection.bag_count}</div>`,
-            className: "custom-div-icon",
+              background-color: ${collection.collected ? "#10b981" : "#ef4444"};
+              position: relative;
+              z-index: ${isHighlighted ? "1000" : "100"};
+            ">
+              ${collection.bag_count}
+            </div>
+          `
+
+          const icon = L.divIcon({
+            html: iconHtml,
+            className: "custom-collection-marker",
             iconSize: [isHighlighted ? 32 : 28, isHighlighted ? 32 : 28],
             iconAnchor: [isHighlighted ? 16 : 14, isHighlighted ? 16 : 14],
           })
 
-          const marker = L.marker([collection.location_lat, collection.location_lng], { icon }).addTo(map)
+          const marker = L.marker([collection.location_lat, collection.location_lng], { icon })
 
-          marker.bindPopup(`
-            <div style="padding: 12px; min-width: 220px;">
+          // Create popup content
+          const popupContent = `
+            <div style="padding: 12px; min-width: 220px; font-family: system-ui, -apple-system, sans-serif;">
               <h3 style="font-weight: 600; margin-bottom: 8px; color: #1f2937; font-size: 16px;">
                 ${collection.location_name}
               </h3>
@@ -196,38 +225,68 @@ export default function MapComponent({
                 </span>
               </div>
             </div>
-          `)
+          `
+
+          marker.bindPopup(popupContent)
+          marker.addTo(map)
+          markers.push(marker)
         })
 
-        // If we have collections, fit the map to show all of them
+        // Fit map to show all markers if we have collections and no specific highlight
         if (collections.length > 0 && !highlightPostcode) {
-          const group = new L.featureGroup(collections.map((c) => L.marker([c.location_lat, c.location_lng])))
+          const group = new L.featureGroup(markers)
           map.fitBounds(group.getBounds().pad(0.1))
         }
+
+        setIsLoading(false)
       } catch (error) {
         console.error("Error loading map:", error)
-        if (mapRef.current) {
-          mapRef.current.innerHTML = `
-            <div style="display: flex; align-items: center; justify-content: center; height: 100%; background-color: #f3f4f6; border-radius: 8px; border: 2px dashed #d1d5db;">
-              <div style="text-align: center; color: #6b7280; padding: 20px;">
-                <div style="font-size: 48px; margin-bottom: 16px;">🗺️</div>
-                <p style="font-weight: 500; margin-bottom: 8px;">Map loading...</p>
-                <p style="font-size: 12px;">If this persists, there may be a network issue.</p>
-              </div>
-            </div>
-          `
-        }
+        setError("Failed to load map. Please check your internet connection.")
+        setIsLoading(false)
       }
     }
 
     initMap()
 
     return () => {
+      isMounted = false
       if (mapInstanceRef.current) {
         mapInstanceRef.current.remove()
+        mapInstanceRef.current = null
       }
     }
   }, [center, collections, onLocationSelect, highlightPostcode])
 
-  return <div ref={mapRef} className="w-full h-full" style={{ minHeight: "300px" }} />
+  if (error) {
+    return (
+      <div
+        className={`w-full h-full flex items-center justify-center bg-gray-100 rounded-lg border-2 border-dashed border-gray-300 ${className}`}
+      >
+        <div className="text-center p-8">
+          <div className="text-4xl mb-4">🗺️</div>
+          <p className="text-gray-600 font-medium mb-2">Map Error</p>
+          <p className="text-sm text-gray-500">{error}</p>
+        </div>
+      </div>
+    )
+  }
+
+  if (isLoading) {
+    return (
+      <div className={`w-full h-full flex items-center justify-center bg-gray-100 rounded-lg ${className}`}>
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <p className="text-gray-600">Loading map...</p>
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div
+      ref={mapRef}
+      className={`w-full h-full min-h-[300px] rounded-lg overflow-hidden ${className}`}
+      style={{ minHeight: "300px" }}
+    />
+  )
 }

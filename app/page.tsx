@@ -7,6 +7,14 @@ import { Badge } from "@/components/ui/badge"
 import { MapPin, Users, Shield, Trash2, Award, Bell } from "lucide-react"
 import LoginModal from "./components/login-modal"
 import { useAuth } from "@/contexts/auth-context"
+import { supabase } from "@/lib/supabase"
+
+type Stats = {
+  totalBags: number
+  activeChampions: number
+  areasCleanedCount: number
+  collectedBags: number
+}
 
 export default function HomePage() {
   const { user, profile, loading } = useAuth()
@@ -14,6 +22,13 @@ export default function HomePage() {
     isOpen: false,
     userType: "",
   })
+  const [stats, setStats] = useState<Stats>({
+    totalBags: 0,
+    activeChampions: 0,
+    areasCleanedCount: 0,
+    collectedBags: 0,
+  })
+  const [statsLoading, setStatsLoading] = useState(true)
 
   const openLogin = (userType: string) => {
     setLoginModal({ isOpen: true, userType })
@@ -22,6 +37,48 @@ export default function HomePage() {
   const closeLogin = () => {
     setLoginModal({ isOpen: false, userType: "" })
   }
+
+  // Fetch statistics
+  useEffect(() => {
+    const fetchStats = async () => {
+      try {
+        // Get total bags and collections
+        const { data: collections, error: collectionsError } = await supabase
+          .from("bag_collections")
+          .select("bag_count, collected, champion_id")
+
+        if (collectionsError) throw collectionsError
+
+        // Get active champions count
+        const { data: champions, error: championsError } = await supabase
+          .from("profiles")
+          .select("id")
+          .eq("user_type", "champion")
+
+        if (championsError) throw championsError
+
+        // Calculate stats
+        const totalBags = collections?.reduce((sum, collection) => sum + collection.bag_count, 0) || 0
+        const collectedBags =
+          collections?.filter((c) => c.collected).reduce((sum, collection) => sum + collection.bag_count, 0) || 0
+        const activeChampions = champions?.length || 0
+        const areasCleanedCount = collections?.length || 0
+
+        setStats({
+          totalBags,
+          activeChampions,
+          areasCleanedCount,
+          collectedBags,
+        })
+      } catch (error) {
+        console.error("Error fetching stats:", error)
+      } finally {
+        setStatsLoading(false)
+      }
+    }
+
+    fetchStats()
+  }, [])
 
   useEffect(() => {
     if (!loading && user && profile) {
@@ -86,19 +143,28 @@ export default function HomePage() {
               efforts.
             </p>
 
-            {/* Stats */}
+            {/* Real-time Stats */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-12">
-              <div className="bg-white p-6 rounded-lg shadow-sm">
-                <div className="text-3xl font-bold text-green-600 mb-2">0</div>
-                <div className="text-gray-600">Bags Collected</div>
+              <div className="bg-white p-6 rounded-lg shadow-sm border border-green-200">
+                <div className="text-3xl font-bold text-green-600 mb-2">{statsLoading ? "..." : stats.totalBags}</div>
+                <div className="text-gray-600">Total Bags Logged</div>
+                <div className="text-sm text-green-600 mt-1">
+                  {statsLoading ? "..." : stats.collectedBags} collected
+                </div>
               </div>
-              <div className="bg-white p-6 rounded-lg shadow-sm">
-                <div className="text-3xl font-bold text-blue-600 mb-2">0</div>
+              <div className="bg-white p-6 rounded-lg shadow-sm border border-blue-200">
+                <div className="text-3xl font-bold text-blue-600 mb-2">
+                  {statsLoading ? "..." : stats.activeChampions}
+                </div>
                 <div className="text-gray-600">Active Champions</div>
+                <div className="text-sm text-blue-600 mt-1">Community volunteers</div>
               </div>
-              <div className="bg-white p-6 rounded-lg shadow-sm">
-                <div className="text-3xl font-bold text-purple-600 mb-2">0</div>
+              <div className="bg-white p-6 rounded-lg shadow-sm border border-purple-200">
+                <div className="text-3xl font-bold text-purple-600 mb-2">
+                  {statsLoading ? "..." : stats.areasCleanedCount}
+                </div>
                 <div className="text-gray-600">Areas Cleaned</div>
+                <div className="text-sm text-purple-600 mt-1">Collection points</div>
               </div>
             </div>
           </div>
@@ -122,7 +188,7 @@ export default function HomePage() {
                 <CardContent className="space-y-3">
                   <div className="flex items-center space-x-2 text-sm text-gray-600">
                     <MapPin className="h-4 w-4" />
-                    <span>Log bag locations</span>
+                    <span>Log bag locations with postcodes</span>
                   </div>
                   <div className="flex items-center space-x-2 text-sm text-gray-600">
                     <Trash2 className="h-4 w-4" />
@@ -210,7 +276,7 @@ export default function HomePage() {
                 <div>
                   <h4 className="font-semibold text-gray-900 mb-2">Collect & Log</h4>
                   <p className="text-gray-600">
-                    Clean Champions collect litter in purple bags and log their location in the app
+                    Clean Champions collect litter in purple bags and log their location with postcodes in the app
                   </p>
                 </div>
               </div>

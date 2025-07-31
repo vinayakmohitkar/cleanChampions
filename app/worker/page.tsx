@@ -13,7 +13,9 @@ import dynamic from "next/dynamic"
 const MapComponent = dynamic(() => import("@/components/map-component"), {
   ssr: false,
   loading: () => (
-    <div className="w-full h-96 bg-gray-100 rounded-lg flex items-center justify-center">Loading map...</div>
+    <div className="w-full h-96 bg-gray-100 rounded-lg flex items-center justify-center">
+      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+    </div>
   ),
 })
 
@@ -86,7 +88,12 @@ export default function WorkerDashboard() {
         `)
         .order("created_at", { ascending: false })
 
-      if (error) throw error
+      if (error) {
+        console.error("Supabase error:", error)
+        throw error
+      }
+
+      console.log("Fetched collections:", data)
       setCollections(data || [])
     } catch (error) {
       console.error("Error fetching collections:", error)
@@ -133,6 +140,20 @@ export default function WorkerDashboard() {
         <div className="text-center">
           <h1 className="text-2xl font-bold text-gray-900 mb-2">Access Denied</h1>
           <p className="text-gray-600 mb-4">Please log in to access the worker dashboard.</p>
+          <a href="/" className="text-blue-600 hover:underline">
+            Go to Home
+          </a>
+        </div>
+      </div>
+    )
+  }
+
+  if (profile.user_type !== "worker") {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <h1 className="text-2xl font-bold text-gray-900 mb-2">Access Denied</h1>
+          <p className="text-gray-600 mb-4">You don't have worker privileges.</p>
           <a href="/" className="text-blue-600 hover:underline">
             Go to Home
           </a>
@@ -263,6 +284,7 @@ export default function WorkerDashboard() {
                     center={{ lat: 52.9548, lng: -1.1581 }} // Nottingham coordinates
                     collections={collections}
                     showAllCollections={true}
+                    className="border-0"
                   />
                 </div>
               </CardContent>

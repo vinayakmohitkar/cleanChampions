@@ -103,7 +103,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         return
       }
 
-      console.log("Profile fetched:", data)
+      console.log("Profile fetched successfully:", data)
       setProfile(data)
     } catch (error) {
       console.error("Error in fetchProfile:", error)
@@ -113,7 +113,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const signIn = async (email: string, password: string) => {
     try {
       console.log("Attempting to sign in:", email)
-      const { error } = await supabase.auth.signInWithPassword({
+      const { data, error } = await supabase.auth.signInWithPassword({
         email,
         password,
       })
@@ -123,6 +123,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         return { error }
       }
 
+      console.log("Sign in successful, user:", data.user?.email)
       return { error: null }
     } catch (error) {
       console.error("Error in signIn:", error)
@@ -132,7 +133,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const signUp = async (email: string, password: string, userData: any) => {
     try {
-      console.log("Attempting to sign up:", email, userData)
+      console.log("Attempting to sign up:", email, "as", userData.userType)
 
       const { data, error } = await supabase.auth.signUp({
         email,
@@ -150,19 +151,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (data.user) {
         console.log("User created:", data.user.id)
 
-        const { error: profileError } = await supabase.from("profiles").upsert(
-          {
-            id: data.user.id,
-            email: email,
-            full_name: userData.name,
-            phone: userData.phone || null,
-            preferred_area: userData.area || null,
-            user_type: userData.userType,
-          },
-          {
-            onConflict: "id",
-          },
-        )
+        const profileData = {
+          id: data.user.id,
+          email: email,
+          full_name: userData.name,
+          phone: userData.phone || null,
+          preferred_area: userData.area || null,
+          user_type: userData.userType,
+        }
+
+        console.log("Creating profile with data:", profileData)
+
+        const { error: profileError } = await supabase.from("profiles").upsert(profileData, {
+          onConflict: "id",
+        })
 
         if (profileError) {
           console.error("Error creating profile:", profileError)
@@ -170,15 +172,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
 
         console.log("Profile created successfully")
-
-        setProfile({
-          id: data.user.id,
-          email: email,
-          full_name: userData.name,
-          phone: userData.phone || null,
-          preferred_area: userData.area || null,
-          user_type: userData.userType,
-        })
+        setProfile(profileData)
       }
 
       return { error: null }
